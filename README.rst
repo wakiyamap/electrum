@@ -56,10 +56,7 @@ Check out the code from Github::
 
 Need yescrypt_hash::
 
-    wget https://github.com/amarian12/p2pool-hash-scripts/archive/master.zip
-    unzip p2pool-hash-scripts-master.zip
-    cd p2pool-hash-scripts-master\yescrypt-hash-python
-    python3 setup.py install
+    pip3 install https://github.com/wakiyamap/zny_yescrypt_python.git
 
 Run install (this should install dependencies)::
 
