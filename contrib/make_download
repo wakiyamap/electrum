@@ -19,10 +19,10 @@ string = string.replace("##VERSION_APK##", version_apk)
 files = {
     'tgz': "Electrum-MONA-%s.tar.gz" % version,
     'zip': "Electrum-MONA-%s.zip" % version,
-    'mac': "electrum-mona-%s.dmg" % version_mac,
-    'win': "electrum-mona-%s.exe" % version_win,
-    'win_setup': "electrum-mona-%s-setup.exe" % version_win,
-    'win_portable': "electrum-mona-%s-portable.exe" % version_win,
+    'mac': "electrum-zeny-%s.dmg" % version_mac,
+    'win': "electrum-zeny-%s.exe" % version_win,
+    'win_setup': "electrum-zeny-%s-setup.exe" % version_win,
+    'win_portable': "electrum-zeny-%s-portable.exe" % version_win,
 }
 
 for k, n in files.items():

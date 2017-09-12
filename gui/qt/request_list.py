@@ -29,10 +29,10 @@ from __future__ import unicode_literals
 
 import six
 
-from electrum_mona.i18n import _
-from electrum_mona.util import block_explorer_URL, format_satoshis, format_time, age
-from electrum_mona.plugins import run_hook
-from electrum_mona.paymentrequest import PR_UNPAID, PR_PAID, PR_UNKNOWN, PR_EXPIRED
+from electrum_zeny.i18n import _
+from electrum_zeny.util import block_explorer_URL, format_satoshis, format_time, age
+from electrum_zeny.plugins import run_hook
+from electrum_zeny.paymentrequest import PR_UNPAID, PR_PAID, PR_UNKNOWN, PR_EXPIRED
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 from .util import MyTreeWidget, pr_tooltips, pr_icons

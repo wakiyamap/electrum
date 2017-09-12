@@ -14,14 +14,14 @@ from six.moves import queue
 from collections import namedtuple
 from functools import partial
 
-from electrum_mona.i18n import _
+from electrum_zeny.i18n import _
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 
 if platform.system() == 'Windows':
     MONOSPACE_FONT = 'Lucida Console'
 elif platform.system() == 'Darwin':
-    MONOSPACE_FONT = 'Monaco'
+    MONOSPACE_FONT = 'Zenyco'
 else:
     MONOSPACE_FONT = 'monospace'
 
@@ -33,7 +33,7 @@ BLACK_FG = "QWidget {color:black;}"
 
 dialogs = []
 
-from electrum_mona.paymentrequest import PR_UNPAID, PR_PAID, PR_UNKNOWN, PR_EXPIRED
+from electrum_zeny.paymentrequest import PR_UNPAID, PR_PAID, PR_UNKNOWN, PR_EXPIRED
 
 pr_icons = {
     PR_UNPAID:":icons/unpaid.png",

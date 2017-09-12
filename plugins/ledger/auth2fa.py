@@ -4,12 +4,12 @@ import threading
 from PyQt4.Qt import (QDialog, QInputDialog, QLineEdit, QTextEdit, QVBoxLayout, QLabel, SIGNAL)
 import PyQt4.QtCore as QtCore
 
-from electrum_mona.i18n import _
-from electrum_mona_gui.qt.util import *
-from electrum_mona.util import print_msg
+from electrum_zeny.i18n import _
+from electrum_zeny_gui.qt.util import *
+from electrum_zeny.util import print_msg
 
 import os, hashlib, websocket, threading, logging, json, copy
-from electrum_mona_gui.qt.qrcodewidget import QRCodeWidget, QRDialog
+from electrum_zeny_gui.qt.qrcodewidget import QRCodeWidget, QRDialog
 from btchip.btchip import *
 
 DEBUG = False

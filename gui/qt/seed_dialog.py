@@ -30,7 +30,7 @@ from __future__ import unicode_literals
 import six
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
-from electrum_mona.i18n import _
+from electrum_zeny.i18n import _
 
 from .util import *
 from .qrtextedit import ShowQRTextEdit, ScanQRTextEdit
@@ -141,14 +141,14 @@ class SeedLayout(QVBoxLayout):
         return ' '.join(text.split())
 
     def on_edit(self):
-        from electrum_mona.bitcoin import seed_type
+        from electrum_zeny.bitcoin import seed_type
         s = self.get_seed()
         b = self.is_seed(s)
         if not self.is_bip39:
             t = seed_type(s)
             label = _('Seed Type') + ': ' + t if t else ''
         else:
-            from electrum_mona.keystore import bip39_is_checksum_valid
+            from electrum_zeny.keystore import bip39_is_checksum_valid
             is_checksum, is_wordlist = bip39_is_checksum_valid(s)
             status = ('checksum: ' + ('ok' if is_checksum else 'failed')) if is_wordlist else 'unknown wordlist'
             label = 'BIP39' + ' (%s)'%status
@@ -177,7 +177,7 @@ class KeysLayout(QVBoxLayout):
 class SeedDialog(WindowModalDialog):
 
     def __init__(self, parent, seed, passphrase):
-        WindowModalDialog.__init__(self, parent, ('Electrum-mona - ' + _('Seed')))
+        WindowModalDialog.__init__(self, parent, ('Electrum-zeny - ' + _('Seed')))
         self.setMinimumWidth(400)
         vbox = QVBoxLayout(self)
         title =  _("Your wallet generation seed is:")

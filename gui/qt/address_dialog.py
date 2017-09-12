@@ -28,7 +28,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import six
-from electrum_mona.i18n import _
+from electrum_zeny.i18n import _
 
 import PyQt4
 from PyQt4.QtGui import *

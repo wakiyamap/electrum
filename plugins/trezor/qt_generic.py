@@ -4,14 +4,14 @@ import threading
 from PyQt4.Qt import Qt
 from PyQt4.Qt import QGridLayout, QInputDialog, QPushButton
 from PyQt4.Qt import QVBoxLayout, QLabel, SIGNAL
-from electrum_mona_gui.qt.util import *
+from electrum_zeny_gui.qt.util import *
 from .plugin import TIM_NEW, TIM_RECOVER, TIM_MNEMONIC
 from ..hw_wallet.qt import QtHandlerBase, QtPluginBase
 
-from electrum_mona.i18n import _
-from electrum_mona.plugins import hook, DeviceMgr
-from electrum_mona.util import PrintError, UserCancelled, bh2u
-from electrum_mona.wallet import Wallet, Standard_Wallet
+from electrum_zeny.i18n import _
+from electrum_zeny.plugins import hook, DeviceMgr
+from electrum_zeny.util import PrintError, UserCancelled, bh2u
+from electrum_zeny.wallet import Wallet, Standard_Wallet
 
 PASSPHRASE_HELP_SHORT =_(
     "Passphrases allow you to access new wallets, each "
@@ -242,7 +242,7 @@ class QtPlugin(QtPluginBase):
             else:
                 msg = _("Enter the master private key beginning with xprv:")
                 def set_enabled():
-                    from electrum_mona.keystore import is_xprv
+                    from electrum_zeny.keystore import is_xprv
                     wizard.next_button.setEnabled(is_xprv(clean_text(text)))
                 text.textChanged.connect(set_enabled)
                 next_enabled = False

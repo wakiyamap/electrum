@@ -38,22 +38,22 @@ from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 import PyQt4.QtCore as QtCore
 
-from electrum_mona.util import bh2u, bfh
+from electrum_zeny.util import bh2u, bfh
 from . import icons_rc
 
-from electrum_mona import keystore
-from electrum_mona.bitcoin import COIN, is_address, TYPE_ADDRESS
-from electrum_mona.plugins import run_hook
-from electrum_mona.i18n import _
-from electrum_mona.util import (format_time, format_satoshis, PrintError,
+from electrum_zeny import keystore
+from electrum_zeny.bitcoin import COIN, is_address, TYPE_ADDRESS
+from electrum_zeny.plugins import run_hook
+from electrum_zeny.i18n import _
+from electrum_zeny.util import (format_time, format_satoshis, PrintError,
                            format_satoshis_plain, NotEnoughFunds,
                            UserCancelled)
-from electrum_mona import Transaction, mnemonic
-from electrum_mona import util, bitcoin, commands, coinchooser
-from electrum_mona import SimpleConfig, paymentrequest
-from electrum_mona.wallet import Wallet, Multisig_Wallet
+from electrum_zeny import Transaction, mnemonic
+from electrum_zeny import util, bitcoin, commands, coinchooser
+from electrum_zeny import SimpleConfig, paymentrequest
+from electrum_zeny.wallet import Wallet, Multisig_Wallet
 try:
-    from electrum_mona.plot import plot_history
+    from electrum_zeny.plot import plot_history
 except:
     plot_history = None
 
@@ -64,7 +64,7 @@ from .transaction_dialog import show_transaction
 from .fee_slider import FeeSlider
 
 
-from electrum_mona import ELECTRUM_VERSION
+from electrum_zeny import ELECTRUM_VERSION
 import re
 
 from .util import *
@@ -89,7 +89,7 @@ class StatusBarButton(QPushButton):
             self.func()
 
 
-from electrum_mona.paymentrequest import PR_UNPAID, PR_PAID, PR_UNKNOWN, PR_EXPIRED
+from electrum_zeny.paymentrequest import PR_UNPAID, PR_PAID, PR_UNKNOWN, PR_EXPIRED
 
 
 class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
@@ -356,7 +356,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
             self.setGeometry(100, 100, 840, 400)
 
     def watching_only_changed(self):
-        title = 'Electrum-mona %s  -  %s' % (self.wallet.electrum_version,
+        title = 'Electrum-zeny %s  -  %s' % (self.wallet.electrum_version,
                                         self.wallet.basename())
         extra = [self.wallet.storage.get('wallet_type', '?')]
         if self.wallet.is_watching_only():
@@ -509,7 +509,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
 
         help_menu = menubar.addMenu(_("&Help"))
         help_menu.addAction(_("&About"), self.show_about)
-        help_menu.addAction(_("&Official website"), lambda: webbrowser.open("https://electrum-mona.org/"))
+        help_menu.addAction(_("&Official website"), lambda: webbrowser.open("https://electrum-zeny.org/"))
         help_menu.addSeparator()
         help_menu.addAction(_("&Documentation"), lambda: webbrowser.open("http://docs.electrum.org/")).setShortcut(QKeySequence.HelpContents)
         help_menu.addAction(_("&Report Bug"), self.show_report_bug)
@@ -522,20 +522,20 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         d = self.network.get_donation_address()
         if d:
             host = self.network.get_parameters()[0]
-            self.pay_to_URI('monacoin:%s?message=donation for %s'%(d, host))
+            self.pay_to_URI('bitzeny:%s?message=donation for %s'%(d, host))
         else:
             self.show_error(_('No donation address for this server'))
 
     def show_about(self):
-        QMessageBox.about(self, "Electrum-mona",
+        QMessageBox.about(self, "Electrum-zeny",
             _("Version")+" %s" % (self.wallet.electrum_version) + "\n\n" +
-                _("Electrum's focus is speed, with low resource usage and simplifying Bitcoin. You do not need to perform regular backups, because your wallet can be recovered from a secret phrase that you can memorize or write on paper. Startup times are instant because it operates in conjunction with high-performance servers that handle the most complicated parts of the Bitcoin system."  + "\n\n" + _("Electrum-mona's icon from oimo at askmona.")  + "\n" + 
+                _("Electrum's focus is speed, with low resource usage and simplifying Bitcoin. You do not need to perform regular backups, because your wallet can be recovered from a secret phrase that you can memorize or write on paper. Startup times are instant because it operates in conjunction with high-performance servers that handle the most complicated parts of the Bitcoin system."  + "\n\n" + _("Electrum-zeny's icon from oimo at askzeny.")  + "\n" + 
                 _("Uses icons from the Icons8 icon pack (icons8.com).")))
 
     def show_report_bug(self):
         msg = ' '.join([
             _("Please report any bugs as issues on github:<br/>"),
-            "<a href=\"https://github.com/wakiyamap/electrum-mona/issues\">https://github.com/wakiyamap/electrum-mona/issues</a><br/><br/>",
+            "<a href=\"https://github.com/wakiyamap/electrum-zeny/issues\">https://github.com/wakiyamap/electrum-zeny/issues</a><br/><br/>",
             _("Before reporting a bug, upgrade to the most recent version of Electrum (latest release or git HEAD), and include the version number in your report."),
             _("Try to explain not only what the bug is, but how it occurs.")
          ])
@@ -567,7 +567,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
 
     def notify(self, message):
         if self.tray:
-            self.tray.showMessage("Electrum-mona", message, QSystemTrayIcon.Information, 20000)
+            self.tray.showMessage("Electrum-zeny", message, QSystemTrayIcon.Information, 20000)
 
 
 
@@ -913,7 +913,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
     def new_payment_request(self):
         addr = self.wallet.get_unused_address()
         if addr is None:
-            from electrum_mona.wallet import Imported_Wallet
+            from electrum_zeny.wallet import Imported_Wallet
             if not self.wallet.is_deterministic():
                 msg = [
                     _('No more addresses in your wallet.'),
@@ -2015,7 +2015,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         return d.run()
 
     def tx_from_text(self, txt):
-        from electrum_mona.transaction import tx_from_str, Transaction
+        from electrum_zeny.transaction import tx_from_str, Transaction
         try:
             tx = tx_from_str(txt)
             return Transaction(tx)
@@ -2024,7 +2024,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
             return
 
     def read_tx_from_qrcode(self):
-        from electrum_mona import qrscanner
+        from electrum_zeny import qrscanner
         try:
             data = qrscanner.scan_barcode(self.config.get_video_device())
         except BaseException as e:
@@ -2033,7 +2033,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         if not data:
             return
         # if the user scanned a bitcoin URI
-        if data.startswith("monacoin:"):
+        if data.startswith("bitzeny:"):
             self.pay_to_URI(data)
             return
         # else if the user scanned an offline signed tx
@@ -2072,7 +2072,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
             self.show_transaction(tx)
 
     def do_process_from_txid(self):
-        from electrum_mona import transaction
+        from electrum_zeny import transaction
         txid, ok = QInputDialog.getText(self, _('Lookup transaction'), _('Transaction ID') + ':')
         if ok and txid:
             txid = str(txid).strip()
@@ -2103,7 +2103,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         e.setReadOnly(True)
         vbox.addWidget(e)
 
-        defaultname = 'electrum-mona-private-keys.csv'
+        defaultname = 'electrum-zeny-private-keys.csv'
         select_msg = _('Select file to export your private keys to')
         hbox, filename_e, csv_button = filename_field(self, self.config, defaultname, select_msg)
         vbox.addLayout(hbox)
@@ -2197,7 +2197,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         d = WindowModalDialog(self, _('Export History'))
         d.setMinimumSize(400, 200)
         vbox = QVBoxLayout(d)
-        defaultname = os.path.expanduser('~/electrum-mona-history.csv')
+        defaultname = os.path.expanduser('~/electrum-zeny-history.csv')
         select_msg = _('Select file to export your wallet transactions to')
         hbox, filename_e, csv_button = filename_field(self, self.config, defaultname, select_msg)
         vbox.addLayout(hbox)
@@ -2368,7 +2368,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         lang_help = _('Select which language is used in the GUI (after restart).')
         lang_label = HelpLabel(_('Language') + ':', lang_help)
         lang_combo = QComboBox()
-        from electrum_mona.i18n import languages
+        from electrum_zeny.i18n import languages
         lang_combo.addItems(list(languages.values()))
         try:
             index = languages.keys().index(self.config.get("language",''))
@@ -2541,7 +2541,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         block_ex_combo.currentIndexChanged.connect(on_be)
         gui_widgets.append((block_ex_label, block_ex_combo))
 
-        from electrum_mona import qrscanner
+        from electrum_zeny import qrscanner
         system_cameras = qrscanner._find_system_cameras()
         qr_combo = QComboBox()
         qr_combo.addItem("Default","default")

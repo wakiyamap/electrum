@@ -1,7 +1,7 @@
-import select, time, electrum_mona, queue
-from electrum_mona import Connection, Interface, SimpleConfig
+import select, time, electrum_zeny, queue
+from electrum_zeny import Connection, Interface, SimpleConfig
 
-from electrum_mona.network import filter_protocol, parse_servers
+from electrum_zeny.network import filter_protocol, parse_servers
 from collections import defaultdict
 
 # electrum.util.set_verbosity(1)

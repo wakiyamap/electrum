@@ -1,7 +1,7 @@
 # Configuration file for the electrum client
 # Settings defined here are shared across wallets
 #
-# copy this file to /etc/electrum-mona.conf if you want read-only settings
+# copy this file to /etc/electrum-zeny.conf if you want read-only settings
 
 [client]
 server = electrumx.tamami-foundation.org:50001:t

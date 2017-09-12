@@ -8,7 +8,7 @@ PYWIN32_URL=https://sourceforge.net/projects/pywin32/files/pywin32/Build%20221/p
 #PYQT4_URL=https://sourceforge.net/projects/pyqt/files/PyQt4/PyQt-4.11.4/PyQt4-4.11.4-gpl-Py3.4-Qt4.8.7-x64.exe
 PYQT4_URL=https://sourceforge.net/projects/pyqt/files/PyQt4/PyQt-4.11.4/PyQt4-4.11.4-gpl-Py3.4-Qt4.8.7-x32.exe
 NSIS_URL=http://prdownloads.sourceforge.net/nsis/nsis-2.46-setup.exe?download
-LYRA2RE_HASH_PYTHON_URL=https://github.com/metalicjames/lyra2re-hash-python/archive/master.zip
+ZNY_YESCRYPT_PYTHON_URL=https://github.com/wakiyamap/zny_yescrypt_python/archive/master.zip
 
 
 ## These settings probably don't need change
@@ -104,4 +104,4 @@ wine mingw-get install mingw32-libz
 
 printf "[build]\ncompiler=mingw32\n" > $WINEPREFIX/drive_c/Python34/Lib/distutils/distutils.cfg
 
-$PYTHON -m pip install $LYRA2RE_HASH_PYTHON_URL
+$PYTHON -m pip install $ZNY_YESCRYPT_PYTHON_URL

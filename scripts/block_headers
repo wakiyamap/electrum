@@ -3,8 +3,8 @@
 # A simple script that connects to a server and displays block headers
 
 import time
-from electrum_mona import SimpleConfig, Network
-from electrum_mona.util import print_msg, json_encode
+from electrum_zeny import SimpleConfig, Network
+from electrum_zeny.util import print_msg, json_encode
 
 # start network
 c = SimpleConfig()

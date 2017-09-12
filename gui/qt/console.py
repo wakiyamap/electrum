@@ -10,13 +10,13 @@ import sys, os, re
 import traceback, platform
 from PyQt4 import QtCore
 from PyQt4 import QtGui
-from electrum_mona import util
+from electrum_zeny import util
 
 
 if platform.system() == 'Windows':
     MONOSPACE_FONT = 'Lucida Console'
 elif platform.system() == 'Darwin':
-    MONOSPACE_FONT = 'Monaco'
+    MONOSPACE_FONT = 'Zenyco'
 else:
     MONOSPACE_FONT = 'monospace'
 

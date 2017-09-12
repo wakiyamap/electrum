@@ -30,9 +30,9 @@ from __future__ import unicode_literals
 import six
 
 from .util import *
-from electrum_mona.i18n import _
-from electrum_mona.util import block_explorer_URL, format_satoshis, format_time
-from electrum_mona.plugins import run_hook
+from electrum_zeny.i18n import _
+from electrum_zeny.util import block_explorer_URL, format_satoshis, format_time
+from electrum_zeny.plugins import run_hook
 
 class InvoiceList(MyTreeWidget):
     filter_columns = [0, 1, 2, 3]  # Date, Requestor, Description, Amount

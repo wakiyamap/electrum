@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 import sys
-from electrum_mona import Network
-from electrum_mona.util import json_encode, print_msg
+from electrum_zeny import Network
+from electrum_zeny.util import json_encode, print_msg
 
 try:
     addr = sys.argv[1]

@@ -82,7 +82,7 @@ class BaseWizard(object):
             ('standard',  _("Standard wallet")),
             ('2fa', _("Wallet with two-factor authentication")),
             ('multisig',  _("Multi-signature wallet")),
-            ('imported',  _("Watch Monacoin addresses")),
+            ('imported',  _("Watch Bitzeny addresses")),
         ]
         choices = [pair for pair in wallet_kinds if pair[0] in wallet_types]
         self.choice_dialog(title=title, message=message, choices=choices, run_next=self.on_wallet_type)
@@ -139,8 +139,8 @@ class BaseWizard(object):
 
     def import_addresses(self):
         v = keystore.is_address_list
-        title = _("Import Monacoin Addresses")
-        message = _("Enter a list of Monacoin addresses. This will create a watching-only wallet.")
+        title = _("Import Bitzeny Addresses")
+        message = _("Enter a list of Bitzeny addresses. This will create a watching-only wallet.")
         self.add_xpub_dialog(title=title, message=message, run_next=self.on_import_addresses, is_valid=v)
 
     def on_import_addresses(self, text):
@@ -156,7 +156,7 @@ class BaseWizard(object):
             title = _("Create keystore from keys")
             message = ' '.join([
                 _("To create a watching-only wallet, please enter your master public key (xpub)."),
-                _("To create a spending wallet, please enter a master private key (xprv), or a list of Monacoin private keys.")
+                _("To create a spending wallet, please enter a master private key (xprv), or a list of Bitzeny private keys.")
             ])
             self.add_xpub_dialog(title=title, message=message, run_next=self.on_restore_from_key, is_valid=v)
         else:

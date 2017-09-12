@@ -37,13 +37,13 @@ from PyQt4.QtCore import *
 import PyQt4.QtCore as QtCore
 import PyQt4.QtGui as QtGui
 
-from electrum_mona_gui.qt.qrcodewidget import QRCodeWidget
-from electrum_mona.i18n import _
+from electrum_zeny_gui.qt.qrcodewidget import QRCodeWidget
+from electrum_zeny.i18n import _
 
 if platform.system() == 'Windows':
     MONOSPACE_FONT = 'Lucida Console'
 elif platform.system() == 'Darwin':
-    MONOSPACE_FONT = 'Monaco'
+    MONOSPACE_FONT = 'Zenyco'
 else:
     MONOSPACE_FONT = 'monospace'
 

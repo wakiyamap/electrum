@@ -17,8 +17,8 @@ import sys
 from lib.version import ELECTRUM_VERSION as version
 
 
-name = "Electrum-mona"
-mainscript = 'electrum-mona'
+name = "Electrum-zeny"
+mainscript = 'electrum-zeny'
 
 if sys.version_info[:3] < (3, 4, 0):
     print("Error: " + name + " requires Python version >= 3.4.0...")

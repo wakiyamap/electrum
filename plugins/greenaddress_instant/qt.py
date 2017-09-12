@@ -30,8 +30,8 @@ import requests
 
 from PyQt4.QtGui import QApplication, QPushButton
 
-from electrum_mona.plugins import BasePlugin, hook
-from electrum_mona.i18n import _
+from electrum_zeny.plugins import BasePlugin, hook
+from electrum_zeny.i18n import _
 
 
 

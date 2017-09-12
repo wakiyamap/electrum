@@ -30,12 +30,12 @@ from __future__ import unicode_literals
 import six
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
-from electrum_mona.i18n import _
+from electrum_zeny.i18n import _
 from .util import *
 import re
 import math
 
-from electrum_mona.plugins import run_hook
+from electrum_zeny.plugins import run_hook
 
 def check_password_strength(password):
 

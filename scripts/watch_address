@@ -2,8 +2,8 @@
 
 import sys
 import time
-from electrum_mona import SimpleConfig, Network
-from electrum_mona.util import print_msg, json_encode
+from electrum_zeny import SimpleConfig, Network
+from electrum_zeny.util import print_msg, json_encode
 
 try:
     addr = sys.argv[1]

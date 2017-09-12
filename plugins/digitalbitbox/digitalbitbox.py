@@ -4,12 +4,12 @@
 #
 
 try:
-    import electrum_mona as electrum
-    from electrum_mona.bitcoin import TYPE_ADDRESS, var_int, msg_magic, Hash, verify_message, pubkey_from_signature, point_to_ser, public_key_to_p2pkh, EncodeAES, DecodeAES, MyVerifyingKey
-    from electrum_mona.i18n import _
-    from electrum_mona.keystore import Hardware_KeyStore
+    import electrum_zeny as electrum
+    from electrum_zeny.bitcoin import TYPE_ADDRESS, var_int, msg_magic, Hash, verify_message, pubkey_from_signature, point_to_ser, public_key_to_p2pkh, EncodeAES, DecodeAES, MyVerifyingKey
+    from electrum_zeny.i18n import _
+    from electrum_zeny.keystore import Hardware_KeyStore
     from ..hw_wallet import HW_PluginBase
-    from electrum_mona.util import print_error
+    from electrum_zeny.util import print_error
 
     import time
     import hid

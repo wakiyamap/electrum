@@ -28,7 +28,7 @@ if platform.system() in ['Linux', 'FreeBSD', 'DragonFly']:
         else:
             usr_share = os.path.expanduser('~/.local/share')
     data_files += [
-        (os.path.join(usr_share, 'applications/'), ['electrum-mona.desktop']),
+        (os.path.join(usr_share, 'applications/'), ['electrum-zeny.desktop']),
         (os.path.join(usr_share, 'pixmaps/'), ['icons/electrum.png'])
     ]
 
@@ -41,48 +41,48 @@ setup(
         'pbkdf2',
         'requests',
         'qrcode',
-        'lyra2re2_hash',
+        'zny_yescrypt',
         'protobuf',
         'dnspython',
         'jsonrpclib-pelix',
         'PySocks>=1.6.6',
     ],
     packages=[
-        'electrum_mona',
-        'electrum_mona_gui',
-        'electrum_mona_gui.qt',
-        'electrum_mona_plugins',
-        'electrum_mona_plugins.audio_modem',
-        'electrum_mona_plugins.cosigner_pool',
-        'electrum_mona_plugins.email_requests',
-        'electrum_mona_plugins.greenaddress_instant',
-        'electrum_mona_plugins.hw_wallet',
-        'electrum_mona_plugins.keepkey',
-        'electrum_mona_plugins.labels',
-        'electrum_mona_plugins.ledger',
-        'electrum_mona_plugins.trezor',
-        'electrum_mona_plugins.digitalbitbox',
-        'electrum_mona_plugins.virtualkeyboard',
+        'electrum_zeny',
+        'electrum_zeny_gui',
+        'electrum_zeny_gui.qt',
+        'electrum_zeny_plugins',
+        'electrum_zeny_plugins.audio_modem',
+        'electrum_zeny_plugins.cosigner_pool',
+        'electrum_zeny_plugins.email_requests',
+        'electrum_zeny_plugins.greenaddress_instant',
+        'electrum_zeny_plugins.hw_wallet',
+        'electrum_zeny_plugins.keepkey',
+        'electrum_zeny_plugins.labels',
+        'electrum_zeny_plugins.ledger',
+        'electrum_zeny_plugins.trezor',
+        'electrum_zeny_plugins.digitalbitbox',
+        'electrum_zeny_plugins.virtualkeyboard',
     ],
     package_dir={
-        'electrum_mona': 'lib',
-        'electrum_mona_gui': 'gui',
-        'electrum_mona_plugins': 'plugins',
+        'electrum_zeny': 'lib',
+        'electrum_zeny_gui': 'gui',
+        'electrum_zeny_plugins': 'plugins',
     },
     package_data={
-        'electrum_mona': [
+        'electrum_zeny': [
             'currencies.json',
             'www/index.html',
             'wordlist/*.txt',
             'locale/*/LC_MESSAGES/electrum.mo',
         ]
     },
-    scripts=['electrum-mona'],
+    scripts=['electrum-zeny'],
     data_files=data_files,
-    description="Lightweight Monacoin Wallet",
+    description="Lightweight Bitzeny Wallet",
     author="Thomas Voegtlin",
     author_email="thomasv@electrum.org",
     license="MIT Licence",
-    url="https://github.com/wakiyamap/electrum-mona",
-    long_description="""Lightweight Monacoin Wallet"""
+    url="https://github.com/wakiyamap/electrum-zeny",
+    long_description="""Lightweight Bitzeny Wallet"""
 )

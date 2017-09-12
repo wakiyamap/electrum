@@ -1,9 +1,9 @@
 include LICENCE RELEASE-NOTES AUTHORS
 include README.rst
-include electrum-mona.conf.sample
-include electrum-mona.desktop
+include electrum-zeny.conf.sample
+include electrum-zeny.desktop
 include *.py
-include electrum-mona
+include electrum-zeny
 recursive-include lib *.py
 recursive-include gui *.py
 recursive-include plugins *.py

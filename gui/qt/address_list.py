@@ -32,10 +32,10 @@ import six
 import webbrowser
 
 from .util import *
-from electrum_mona.i18n import _
-from electrum_mona.util import block_explorer_URL, format_satoshis, format_time
-from electrum_mona.plugins import run_hook
-from electrum_mona.bitcoin import is_address
+from electrum_zeny.i18n import _
+from electrum_zeny.util import block_explorer_URL, format_satoshis, format_time
+from electrum_zeny.plugins import run_hook
+from electrum_zeny.bitcoin import is_address
 
 
 class AddressList(MyTreeWidget):
@@ -109,7 +109,7 @@ class AddressList(MyTreeWidget):
                         self.setCurrentItem(address_item)
 
     def create_menu(self, position):
-        from electrum_mona.wallet import Multisig_Wallet
+        from electrum_zeny.wallet import Multisig_Wallet
         is_multisig = isinstance(self.wallet, Multisig_Wallet)
         can_delete = self.wallet.can_delete_address()
         selected = self.selectedItems()

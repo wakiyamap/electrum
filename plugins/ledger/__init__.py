@@ -1,4 +1,4 @@
-from electrum_mona.i18n import _
+from electrum_zeny.i18n import _
 
 fullname = 'Ledger Wallet'
 description = 'Provides support for Ledger hardware wallet'

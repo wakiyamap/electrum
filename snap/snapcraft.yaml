@@ -1,8 +1,8 @@
-name: electrum-mona
+name: electrum-zeny
 version: master
-summary: Monacoin thin client
+summary: Bitzeny thin client
 description: |
-  Lightweight Monacoin client
+  Lightweight Bitzeny client
 
 grade: devel # must be 'stable' to release into candidate/stable channels
 confinement: strict

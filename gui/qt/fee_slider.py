@@ -4,7 +4,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import six
-from electrum_mona.i18n import _
+from electrum_zeny.i18n import _
 
 import PyQt4
 from PyQt4.QtGui import *
@@ -34,7 +34,7 @@ class FeeSlider(QSlider):
             self.callback(self.dyn, pos, fee_rate)
 
     def get_tooltip(self, pos, fee_rate):
-        from electrum_mona.util import fee_levels
+        from electrum_zeny.util import fee_levels
         rate_str = self.window.format_amount(fee_rate) + ' ' + self.window.base_unit() + '/kB'
         if self.dyn:
             tooltip = fee_levels[pos] + '\n' + rate_str

@@ -1,12 +1,12 @@
 from PyQt4.QtGui import *
-from electrum_mona.i18n import _
+from electrum_zeny.i18n import _
 
 
 import datetime
 from collections import defaultdict
 
-from electrum_mona.util import format_satoshis
-from electrum_mona.bitcoin import COIN
+from electrum_zeny.util import format_satoshis
+from electrum_zeny.bitcoin import COIN
 
 import matplotlib
 matplotlib.use('Qt4Agg')

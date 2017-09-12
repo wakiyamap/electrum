@@ -32,10 +32,10 @@ import six
 import webbrowser
 
 from .util import *
-from electrum_mona.i18n import _
-from electrum_mona.util import block_explorer_URL, format_satoshis, format_time
-from electrum_mona.plugins import run_hook
-from electrum_mona.util import timestamp_to_datetime, profiler
+from electrum_zeny.i18n import _
+from electrum_zeny.util import block_explorer_URL, format_satoshis, format_time
+from electrum_zeny.plugins import run_hook
+from electrum_zeny.util import timestamp_to_datetime, profiler
 
 
 TX_ICONS = [

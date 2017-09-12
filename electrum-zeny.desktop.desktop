@@ -2,15 +2,15 @@
 # sudo desktop-file-install electrum.desktop
 
 [Desktop Entry]
-Comment=Lightweight Monacoin Client
-Exec=electrum-mona %u
-GenericName=Monacoin Wallet
-Icon=electrum-mona
-Name=Electrum Monacoin Wallet
+Comment=Lightweight Bitzeny Client
+Exec=electrum-zeny %u
+GenericName=Bitzeny Wallet
+Icon=electrum-zeny
+Name=Electrum Bitzeny Wallet
 Categories=Finance;Network;
 StartupNotify=false
 Terminal=false
 Type=Application
-MimeType=x-scheme-handler/monacoin;
+MimeType=x-scheme-handler/bitzeny;
 
-Name[ja]=electrum-mona
+Name[ja]=electrum-zeny.desktop

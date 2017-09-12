@@ -7,7 +7,7 @@
 ;Variables
 
   !define PRODUCT_NAME "Electrum-MONA"
-  !define PRODUCT_WEB_SITE "https://github.com/wakiyamap/electrum-mona"
+  !define PRODUCT_WEB_SITE "https://github.com/wakiyamap/electrum-zeny"
   !define PRODUCT_PUBLISHER "Electrum Technologies GmbH"
   !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 
@@ -16,7 +16,7 @@
 
   ;Name and file
   Name "${PRODUCT_NAME}"
-  OutFile "dist/electrum-mona-setup.exe"
+  OutFile "dist/electrum-zeny-setup.exe"
 
   ;Default installation folder
   InstallDir "$PROGRAMFILES\${PRODUCT_NAME}"
@@ -110,7 +110,7 @@ Section
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\*.*"
   
   ;Files to pack into the installer
-  File /r "dist\electrum-mona\*.*"
+  File /r "dist\electrum-zeny\*.*"
   File "..\..\icons\electrum.ico"
 
   ;Store installation folder
@@ -122,19 +122,19 @@ Section
 
   ;Create desktop shortcut
   DetailPrint "Creating desktop shortcut..."
-  CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\electrum-mona-${PRODUCT_VERSION}.exe" ""
+  CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\electrum-zeny-${PRODUCT_VERSION}.exe" ""
 
   ;Create start-menu items
   DetailPrint "Creating start-menu items..."
   CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
   CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall.lnk" "$INSTDIR\Uninstall.exe" "" "$INSTDIR\Uninstall.exe" 0
-  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\electrum-mona-${PRODUCT_VERSION}.exe" "" "$INSTDIR\electrum-mona-${PRODUCT_VERSION}.exe" 0
+  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\electrum-zeny-${PRODUCT_VERSION}.exe" "" "$INSTDIR\electrum-zeny-${PRODUCT_VERSION}.exe" 0
 
-  ;Links monacoin: URI's to Electrum
-  WriteRegStr HKCU "Software\Classes\monacoin" "" "URL:monacoin Protocol"
-  WriteRegStr HKCU "Software\Classes\monacoin" "URL Protocol" ""
-  WriteRegStr HKCU "Software\Classes\monacoin" "DefaultIcon" "$\"$INSTDIR\electrum.ico, 0$\""
-  WriteRegStr HKCU "Software\Classes\monacoin\shell\open\command" "" "$\"$INSTDIR\electrum-mona-${PRODUCT_VERSION}.exe$\" $\"%1$\""
+  ;Links bitzeny: URI's to Electrum
+  WriteRegStr HKCU "Software\Classes\bitzeny" "" "URL:bitzeny Protocol"
+  WriteRegStr HKCU "Software\Classes\bitzeny" "URL Protocol" ""
+  WriteRegStr HKCU "Software\Classes\bitzeny" "DefaultIcon" "$\"$INSTDIR\electrum.ico, 0$\""
+  WriteRegStr HKCU "Software\Classes\bitzeny\shell\open\command" "" "$\"$INSTDIR\electrum-zeny-${PRODUCT_VERSION}.exe$\" $\"%1$\""
 
   ;Adds an uninstaller possibilty to Windows Uninstall or change a program section
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayName" "$(^Name)"
@@ -165,7 +165,7 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\*.*"
   RMDir  "$SMPROGRAMS\${PRODUCT_NAME}"
   
-  DeleteRegKey HKCU "Software\Classes\monacoin"
+  DeleteRegKey HKCU "Software\Classes\bitzeny"
   DeleteRegKey HKCU "Software\${PRODUCT_NAME}"
   DeleteRegKey HKCU "${PRODUCT_UNINST_KEY}"
 SectionEnd

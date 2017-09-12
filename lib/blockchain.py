@@ -28,11 +28,11 @@ from . import bitcoin
 from .bitcoin import *
 
 try:
-    import lyra2re2_hash
+    import zny_yescrypt
 except ImportError as e:
-    exit("Please run 'sudo pip3 install https://github.com/metalicjames/lyra2re-hash-python/archive/master.zip'")
+    exit("Please run 'sudo pip3 install https://github.com/wakiyamap/zny_yescrypt_python/archive/master.zip'")
 
-MAX_TARGET = 0xff9f1c0116d1a000000000000000000000000000000000000000000000000000
+MAX_TARGET = 0x00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 
 def serialize_header(res):
     s = int_to_hex(res.get('version'), 4) \
@@ -149,14 +149,11 @@ class Blockchain(util.PrintError):
 
     def verify_header(self, header, prev_header, bits, target):
         prev_hash = hash_header(prev_header)
-        #_hash = hash_header(header)
-        _powhash = rev_hex(bh2u(lyra2re2_hash.getPoWHash(bfh(serialize_header(header)))))
+        _powhash = rev_hex(bh2u(zny_yescrypt.getPoWHash(bfh(serialize_header(header)))))
         height = header.get('block_height')
         if prev_hash != header.get('prev_block_hash'):
             raise BaseException("prev hash mismatch: %s vs %s" % (prev_hash, header.get('prev_block_hash')))
         if bitcoin.TESTNET:
-            return
-        if height < 450000 and height > 1055 and height % 50000 != 0 :
             return
         if bits != header.get('bits'):
             raise BaseException("bits mismatch: %s vs %s" % (bits, header.get('bits')))        
@@ -321,7 +318,7 @@ class Blockchain(util.PrintError):
         PastDifficultyAveragePrev = 0
         bnNum = 0
 
-        #thanks watanabe!! http://askmona.org/5288#res_61
+        #thanks watanabe!! http://askzeny.org/5288#res_61
         if BlockLastSolved is None or height-1 < 450024:
             return 0x1e0fffff, MAX_TARGET
         for i in range(1, PastBlocksMax + 1):
@@ -347,7 +344,7 @@ class Blockchain(util.PrintError):
                 BlockReading = self.read_header((height-1) - CountBlocks)
 
         bnNew = PastDifficultyAverage
-        nTargetTimespan = CountBlocks * 90
+        nTargetTimespan = CountBlocks * 90 #TODO 90 second
 
         nActualTimespan = max(nActualTimespan, nTargetTimespan//3)
         nActualTimespan = min(nActualTimespan, nTargetTimespan*3)
@@ -363,28 +360,8 @@ class Blockchain(util.PrintError):
     def get_target(self, height, chain=None):
         if bitcoin.TESTNET:
             return 0, 0
-        if height <= 1055:
-            return 0x1e0ffff0, MAX_TARGET
-        if height == 50000:
-            return 0x1c23bdcf, MAX_TARGET
-        if height == 100000:
-            return 0x1c0d1935, MAX_TARGET
-        if height == 150000:
-            return 0x1c0c7215, MAX_TARGET
-        if height == 200000:
-            return 0x1c00caa1, MAX_TARGET
-        if height == 250000:
-            return 0x1b662f96, MAX_TARGET
-        if height == 300000:
-            return 0x1c00b806, MAX_TARGET
-        if height == 350000:
-            return 0x1b198ec0, MAX_TARGET
-        if height == 400000:
-            return 0x1b1fb776, MAX_TARGET
-        if height >= 450000:
-            return self.get_target_dgwv3(height, chain)
         else:
-            return 0, 0
+            return self.get_target_dgwv3(height, chain)
 
     def can_connect(self, header, check_height=True):
         height = header['block_height']

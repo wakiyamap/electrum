@@ -35,9 +35,9 @@ from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 import PyQt4.QtCore as QtCore
 
-from electrum_mona.i18n import _
-from electrum_mona.network import DEFAULT_PORTS
-from electrum_mona.network import serialize_server, deserialize_server
+from electrum_zeny.i18n import _
+from electrum_zeny.network import DEFAULT_PORTS
+from electrum_zeny.network import serialize_server, deserialize_server
 
 from .util import *
 

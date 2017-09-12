@@ -37,12 +37,12 @@ from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 import PyQt4.QtCore as QtCore
 
-from electrum_mona import transaction
-from electrum_mona.bitcoin import base_encode
-from electrum_mona.i18n import _
-from electrum_mona.plugins import run_hook
+from electrum_zeny import transaction
+from electrum_zeny.bitcoin import base_encode
+from electrum_zeny.i18n import _
+from electrum_zeny.plugins import run_hook
 
-from electrum_mona.util import bfh
+from electrum_zeny.util import bfh
 from .util import *
 
 dialogs = []  # Otherwise python randomly garbage collects the dialogs...

@@ -220,7 +220,7 @@ def android_data_dir():
     return PythonActivity.mActivity.getFilesDir().getPath() + '/data'
 
 def android_headers_dir():
-    d = android_ext_dir() + '/org.electrum_mona.electrum_mona'
+    d = android_ext_dir() + '/org.electrum_zeny.electrum_zeny'
     if not os.path.exists(d):
         os.mkdir(d)
     return d
@@ -229,7 +229,7 @@ def android_check_data_dir():
     """ if needed, move old directory to sandbox """
     ext_dir = android_ext_dir()
     data_dir = android_data_dir()
-    old_electrum_dir = ext_dir + '/electrum_mona'
+    old_electrum_dir = ext_dir + '/electrum_zeny'
     if not os.path.exists(data_dir) and os.path.exists(old_electrum_dir):
         import shutil
         new_headers_path = android_headers_dir() + '/blockchain_headers'
@@ -331,11 +331,11 @@ def user_dir():
     if 'ANDROID_DATA' in os.environ:
         return android_check_data_dir()
     elif os.name == 'posix':
-        return os.path.join(os.environ["HOME"], ".electrum-mona")
+        return os.path.join(os.environ["HOME"], ".electrum-zeny")
     elif "APPDATA" in os.environ:
-        return os.path.join(os.environ["APPDATA"], "Electrum-MONA")
+        return os.path.join(os.environ["APPDATA"], "Electrum-ZENY")
     elif "LOCALAPPDATA" in os.environ:
-        return os.path.join(os.environ["LOCALAPPDATA"], "Electrum-MONA")
+        return os.path.join(os.environ["LOCALAPPDATA"], "Electrum-ZENY")
     else:
         #raise Exception("No home directory found in environment variables.")
         return
@@ -437,9 +437,9 @@ def time_difference(distance_in_time, include_seconds):
 mainnet_block_explorers = {
     'bchain.info': ('https://bchain.info/MONA',
                         {'tx': 'tx', 'addr': 'addr'}),
-    'insight.monaco-ex.org': ('https://mona.insight.monaco-ex.org/insight',
+    'insight.zenyco-ex.org': ('https://zeny.insight.zenyco-ex.org/insight',
                         {'tx': 'tx', 'addr': 'address'}),
-    'namuyan.dip.jp': ('http://namuyan.dip.jp/MultiLightBlockExplorer/mona',
+    'namuyan.dip.jp': ('http://namuyan.dip.jp/MultiLightBlockExplorer/zeny',
                         {'tx': 'tx', 'addr': 'address'}),
 }
 
@@ -455,7 +455,7 @@ def block_explorer_info():
     return testnet_block_explorers if bitcoin.TESTNET else mainnet_block_explorers
 
 def block_explorer(config):
-    return config.get('block_explorer', 'insight.monaco-ex.org')
+    return config.get('block_explorer', 'insight.zenyco-ex.org')
 
 def block_explorer_tuple(config):
     return block_explorer_info().get(block_explorer(config))
@@ -480,12 +480,12 @@ def parse_URI(uri, on_pr=None):
 
     if ':' not in uri:
         if not bitcoin.is_address(uri):
-            raise BaseException("Not a monacoin address")
+            raise BaseException("Not a bitzeny address")
         return {'address': uri}
 
     u = urllib.parse.urlparse(uri)
-    if u.scheme != 'monacoin':
-        raise BaseException("Not a monacoin URI")
+    if u.scheme != 'bitzeny':
+        raise BaseException("Not a bitzeny URI")
     address = u.path
 
     # python for android fails to parse query
@@ -502,7 +502,7 @@ def parse_URI(uri, on_pr=None):
     out = {k: v[0] for k, v in pq.items()}
     if address:
         if not bitcoin.is_address(address):
-            raise BaseException("Invalid monacoin address:" + address)
+            raise BaseException("Invalid bitzeny address:" + address)
         out['address'] = address
     if 'amount' in out:
         am = out['amount']
@@ -552,7 +552,7 @@ def create_URI(addr, amount, message):
         query.append('amount=%s'%format_satoshis_plain(amount))
     if message:
         query.append('message=%s'%urllib.parse.quote(message))
-    p = urllib.parse.ParseResult(scheme='monacoin', netloc='', path=addr, params='', query='&'.join(query), fragment='')
+    p = urllib.parse.ParseResult(scheme='bitzeny', netloc='', path=addr, params='', query='&'.join(query), fragment='')
     return urllib.parse.urlunparse(p)
 
 

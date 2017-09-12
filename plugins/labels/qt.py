@@ -3,11 +3,11 @@ from functools import partial
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 
-from electrum_mona.plugins import hook
-from electrum_mona.i18n import _
-from electrum_mona_gui.qt import EnterButton
-from electrum_mona_gui.qt.util import ThreadedButton, Buttons
-from electrum_mona_gui.qt.util import WindowModalDialog, OkButton
+from electrum_zeny.plugins import hook
+from electrum_zeny.i18n import _
+from electrum_zeny_gui.qt import EnterButton
+from electrum_zeny_gui.qt.util import ThreadedButton, Buttons
+from electrum_zeny_gui.qt.util import WindowModalDialog, OkButton
 
 from .labels import LabelsPlugin
 

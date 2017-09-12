@@ -7,10 +7,10 @@ import six
 from decimal import Decimal
 _ = lambda x:x
 #from i18n import _
-from electrum_mona import WalletStorage, Wallet
-from electrum_mona.util import format_satoshis, set_verbosity
-from electrum_mona.bitcoin import is_address, COIN, TYPE_ADDRESS
-from electrum_mona.network import filter_protocol
+from electrum_zeny import WalletStorage, Wallet
+from electrum_zeny.util import format_satoshis, set_verbosity
+from electrum_zeny.bitcoin import is_address, COIN, TYPE_ADDRESS
+from electrum_zeny.network import filter_protocol
 import sys, getpass, datetime
 
 # minimal fdisk like gui for console usage

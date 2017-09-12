@@ -27,11 +27,11 @@
 import threading
 
 from PyQt4.Qt import QVBoxLayout, QLabel, SIGNAL
-from electrum_mona_gui.qt.password_dialog import PasswordDialog, PW_PASSPHRASE
-from electrum_mona_gui.qt.util import *
+from electrum_zeny_gui.qt.password_dialog import PasswordDialog, PW_PASSPHRASE
+from electrum_zeny_gui.qt.util import *
 
-from electrum_mona.i18n import _
-from electrum_mona.util import PrintError
+from electrum_zeny.i18n import _
+from electrum_zeny.util import PrintError
 
 # The trickiest thing about this handler was getting windows properly
 # parented on MacOSX.
@@ -171,9 +171,9 @@ class QtHandlerBase(QObject, PrintError):
 
 
 
-from electrum_mona.plugins import hook
-from electrum_mona.util import UserCancelled
-from electrum_mona_gui.qt.main_window import StatusBarButton
+from electrum_zeny.plugins import hook
+from electrum_zeny.util import UserCancelled
+from electrum_zeny_gui.qt.main_window import StatusBarButton
 
 class QtPluginBase(object):
 

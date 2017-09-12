@@ -31,14 +31,14 @@ from xmlrpc.client import ServerProxy
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 
-from electrum_mona import bitcoin, util
-from electrum_mona import transaction
-from electrum_mona.plugins import BasePlugin, hook
-from electrum_mona.i18n import _
-from electrum_mona.wallet import Multisig_Wallet
-from electrum_mona.util import bh2u
+from electrum_zeny import bitcoin, util
+from electrum_zeny import transaction
+from electrum_zeny.plugins import BasePlugin, hook
+from electrum_zeny.i18n import _
+from electrum_zeny.wallet import Multisig_Wallet
+from electrum_zeny.util import bh2u
 
-from electrum_mona_gui.qt.transaction_dialog import show_transaction
+from electrum_zeny_gui.qt.transaction_dialog import show_transaction
 
 import sys
 import traceback

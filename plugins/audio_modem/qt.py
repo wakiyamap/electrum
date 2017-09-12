@@ -5,10 +5,10 @@ from io import BytesIO
 import sys
 import platform
 
-from electrum_mona.plugins import BasePlugin, hook
-from electrum_mona_gui.qt.util import WaitingDialog, EnterButton, WindowModalDialog
-from electrum_mona.util import print_msg, print_error
-from electrum_mona.i18n import _
+from electrum_zeny.plugins import BasePlugin, hook
+from electrum_zeny_gui.qt.util import WaitingDialog, EnterButton, WindowModalDialog
+from electrum_zeny.util import print_msg, print_error
+from electrum_zeny.i18n import _
 
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *

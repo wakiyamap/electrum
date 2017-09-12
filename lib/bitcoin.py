@@ -41,22 +41,18 @@ from . import segwit_addr
 # Bitcoin network constants
 TESTNET = False
 NOLNET = False
-ADDRTYPE_P2PKH = 50
-ADDRTYPE_P2SH = 55
-ADDRTYPE_P2SH_ALT = 5
-ADDRTYPE_P2WPKH = 176
-SEGWIT_HRP = "mona"
+ADDRTYPE_P2PKH = 81
+ADDRTYPE_P2SH = 5
+SEGWIT_HRP = "zeny"
 XPRV_HEADER = 0x0488ade4
 XPUB_HEADER = 0x0488b21e
-XPRV_HEADER_ALT = 0x019d9cfe
-XPUB_HEADER_ALT = 0x019da462
-HEADERS_URL_1st = "https://electrumx2.tamami-foundation.org/blockchain_headers"
-HEADERS_URL_2nd = "https://gateway.ipfs.io/ipfs/QmcizN5G7aQgR3Uj91QkwW5YQnx8z8kgfpYjqMXUrUnanS"
-HEADERS_URL_3rd = "https://sound.sighash.info/blockchain_headers" #thanks ohac!!
-GENESIS = "ff9f1c0116d19de7c9963845e129f9ed1bfc0b376eb54fd7afa42e0d418c8bb6"
+HEADERS_URL_1st = "https://localhost"
+HEADERS_URL_2nd = "https://localhost"
+HEADERS_URL_3rd = "https://localhost"
+GENESIS = "000009f7e55e9e3b4781e22bd87a7cfa4acada9e4340d43ca738bf4e9fb8f5ce"
 
 def set_testnet():
-    global ADDRTYPE_P2PKH, ADDRTYPE_P2SH, ADDRTYPE_P2SH_ALT, ADDRTYPE_P2WPKH
+    global ADDRTYPE_P2PKH, ADDRTYPE_P2SH
     global XPRV_HEADER, XPUB_HEADER
     global TESTNET, HEADERS_URL
     global GENESIS
@@ -64,9 +60,8 @@ def set_testnet():
     TESTNET = True
     ADDRTYPE_P2PKH = 111
     ADDRTYPE_P2SH = 117
-    ADDRTYPE_P2SH_ALT = 196
     ADDRTYPE_P2WPKH = 3
-    SEGWIT_HRP = "tmona"
+    SEGWIT_HRP = "tzeny"
     XPRV_HEADER = 0x04358394
     XPUB_HEADER = 0x043587cf
     HEADERS_URL = "https://example.com/testnet_headers" # TODO
@@ -500,7 +495,7 @@ def is_b58_address(addr):
         addrtype, h = b58_address_to_hash160(addr)
     except Exception as e:
         return False
-    if addrtype not in [ADDRTYPE_P2PKH, ADDRTYPE_P2SH, ADDRTYPE_P2SH_ALT]:
+    if addrtype not in [ADDRTYPE_P2PKH, ADDRTYPE_P2SH]:
         return False
     return addr == hash160_to_b58_address(h, addrtype)
 
@@ -516,7 +511,7 @@ def is_p2pkh(addr):
 def is_p2sh(addr):
     if is_address(addr):
         addrtype, h = b58_address_to_hash160(addr)
-        return addrtype in [ADDRTYPE_P2SH, ADDRTYPE_P2SH_ALT]
+        return addrtype == ADDRTYPE_P2SH
 
 def is_private_key(key):
     try:
@@ -550,7 +545,7 @@ from ecdsa.util import string_to_number, number_to_string
 def msg_magic(message):
     varint = var_int(len(message))
     encoded_varint = varint.encode('ascii')
-    return b"x19Monacoin Signed Message:\n" + encoded_varint + message
+    return b"x19Bitzeny Signed Message:\n" + encoded_varint + message
 
 
 def verify_message(address, sig, message):

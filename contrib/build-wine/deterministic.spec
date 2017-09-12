@@ -9,10 +9,10 @@ else:
     raise BaseException('no name')
 
 
-home = 'C:\\electrum-mona\\'
+home = 'C:\\electrum-zeny\\'
 
 # We don't put these files in to actually include them in the script but to make the Analysis method scan them for imports
-a = Analysis([home+'electrum-mona',
+a = Analysis([home+'electrum-zeny',
               home+'gui/qt/main_window.py',
               home+'gui/text.py',
               home+'lib/util.py',
@@ -51,7 +51,7 @@ exe = EXE(pyz,
           a.scripts,
           a.binaries,
           a.datas,
-          name=os.path.join('build\\pyi.win32\\electrum-mona', cmdline_name),
+          name=os.path.join('build\\pyi.win32\\electrum-zeny', cmdline_name),
           debug=True,
           strip=None,
           upx=False,
@@ -68,4 +68,4 @@ coll = COLLECT(exe,
                debug=True,
                icon=home+'icons/electrum.ico',
                console=False,
-               name=os.path.join('dist', 'electrum-mona'))
+               name=os.path.join('dist', 'electrum-zeny'))

@@ -40,11 +40,11 @@ from PyQt4.QtCore import *
 import PyQt4.QtCore as QtCore
 import PyQt4.QtGui as QtGui
 
-from electrum_mona.plugins import BasePlugin, hook
-from electrum_mona.paymentrequest import PaymentRequest
-from electrum_mona.i18n import _
-from electrum_mona_gui.qt.util import EnterButton, Buttons, CloseButton
-from electrum_mona_gui.qt.util import OkButton, WindowModalDialog
+from electrum_zeny.plugins import BasePlugin, hook
+from electrum_zeny.paymentrequest import PaymentRequest
+from electrum_zeny.i18n import _
+from electrum_zeny_gui.qt.util import EnterButton, Buttons, CloseButton
+from electrum_zeny_gui.qt.util import OkButton, WindowModalDialog
 
 
 class Processor(threading.Thread):
@@ -139,7 +139,7 @@ class Plugin(BasePlugin):
         menu.addAction(_("Send via e-mail"), lambda: self.send(window, addr))
 
     def send(self, window, addr):
-        from electrum_mona import paymentrequest
+        from electrum_zeny import paymentrequest
         r = window.wallet.receive_requests.get(addr)
         message = r.get('memo', '')
         if r.get('signature'):

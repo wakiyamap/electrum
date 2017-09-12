@@ -5,15 +5,15 @@ import threading
 from binascii import hexlify, unhexlify
 from functools import partial
 
-from electrum_mona.util import bfh, bh2u
-from electrum_mona.bitcoin import (b58_address_to_hash160, xpub_from_pubkey,
+from electrum_zeny.util import bfh, bh2u
+from electrum_zeny.bitcoin import (b58_address_to_hash160, xpub_from_pubkey,
                               public_key_to_p2pkh, EncodeBase58Check,
                               TYPE_ADDRESS, TYPE_SCRIPT,
                               TESTNET, ADDRTYPE_P2PKH, ADDRTYPE_P2SH)
-from electrum_mona.i18n import _
-from electrum_mona.plugins import BasePlugin, hook
-from electrum_mona.transaction import deserialize, Transaction
-from electrum_mona.keystore import Hardware_KeyStore, is_xpubkey, parse_xpubkey
+from electrum_zeny.i18n import _
+from electrum_zeny.plugins import BasePlugin, hook
+from electrum_zeny.transaction import deserialize, Transaction
+from electrum_zeny.keystore import Hardware_KeyStore, is_xpubkey, parse_xpubkey
 
 from ..hw_wallet import HW_PluginBase
 

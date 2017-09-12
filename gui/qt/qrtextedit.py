@@ -4,8 +4,8 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import six
-from electrum_mona.i18n import _
-from electrum_mona.plugins import run_hook
+from electrum_zeny.i18n import _
+from electrum_zeny.plugins import run_hook
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 
@@ -53,7 +53,7 @@ class ScanQRTextEdit(ButtonsTextEdit, MessageBoxMixin):
         self.setText(data)
 
     def qr_input(self):
-        from electrum_mona import qrscanner, get_config
+        from electrum_zeny import qrscanner, get_config
         try:
             data = qrscanner.scan_barcode(get_config().get_video_device())
         except BaseException as e:

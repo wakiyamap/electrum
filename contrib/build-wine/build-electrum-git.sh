@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # You probably need to update only this link
-ELECTRUM_GIT_URL=git://github.com/wakiyamap/electrum-mona.git
+ELECTRUM_GIT_URL=git://github.com/wakiyamap/electrum-zeny.git
 BRANCH=python3
-NAME_ROOT=electrum-mona
+NAME_ROOT=electrum-zeny
 
 if [ "$#" -gt 0 ]; then
     BRANCH="$1"
@@ -24,37 +24,37 @@ set -e
 
 cd tmp
 
-if [ -d "electrum-mona-git" ]; then
+if [ -d "electrum-zeny-git" ]; then
     # GIT repository found, update it
     echo "Pull"
-    cd electrum-mona-git
+    cd electrum-zeny-git
     git checkout $BRANCH
     git pull
     cd ..
 else
     # GIT repository not found, clone it
     echo "Clone"
-    git clone -b $BRANCH $ELECTRUM_GIT_URL electrum-mona-git
+    git clone -b $BRANCH $ELECTRUM_GIT_URL electrum-zeny-git
 fi
 
-cd electrum-mona-git
+cd electrum-zeny-git
 VERSION=`git describe --tags`
 echo "Last commit: $VERSION"
 
 cd ..
 
-rm -rf $WINEPREFIX/drive_c/electrum-mona
-cp -r electrum-mona-git $WINEPREFIX/drive_c/electrum-mona
-cp electrum-mona-git/LICENCE .
+rm -rf $WINEPREFIX/drive_c/electrum-zeny
+cp -r electrum-zeny-git $WINEPREFIX/drive_c/electrum-zeny
+cp electrum-zeny-git/LICENCE .
 
 # add locale dir
-cp -r ../../../lib/locale $WINEPREFIX/drive_c/electrum-mona/lib/
+cp -r ../../../lib/locale $WINEPREFIX/drive_c/electrum-zeny/lib/
 
 # Build Qt resources
-wine $WINEPREFIX/drive_c/Python34/Lib/site-packages/PyQt4/pyrcc4.exe C:/electrum-mona/icons.qrc -o C:/electrum-mona/gui/qt/icons_rc.py -py3
+wine $WINEPREFIX/drive_c/Python34/Lib/site-packages/PyQt4/pyrcc4.exe C:/electrum-zeny/icons.qrc -o C:/electrum-zeny/gui/qt/icons_rc.py -py3
 
 
-pushd $WINEPREFIX/drive_c/electrum-mona
+pushd $WINEPREFIX/drive_c/electrum-zeny
 $PYTHON setup.py install
 popd
 
@@ -71,12 +71,12 @@ wine "C:/python34/scripts/pyinstaller.exe" --noconfirm --ascii --name $NAME_ROOT
 wine "$WINEPREFIX/drive_c/Program Files (x86)/NSIS/makensis.exe" /DPRODUCT_VERSION=$VERSION electrum.nsi
 
 cd dist
-mv electrum-mona-setup.exe $NAME_ROOT-$VERSION-setup.exe
+mv electrum-zeny-setup.exe $NAME_ROOT-$VERSION-setup.exe
 cd ..
 
 # build portable version
-cp portable.patch $WINEPREFIX/drive_c/electrum-mona
-pushd $WINEPREFIX/drive_c/electrum-mona
+cp portable.patch $WINEPREFIX/drive_c/electrum-zeny
+pushd $WINEPREFIX/drive_c/electrum-zeny
 patch < portable.patch 
 popd
 wine "C:/python34/scripts/pyinstaller.exe" --noconfirm --ascii --name $NAME_ROOT-$VERSION-portable.exe -w deterministic.spec
