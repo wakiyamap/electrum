@@ -344,7 +344,7 @@ class Blockchain(util.PrintError):
                 BlockReading = self.read_header((height-1) - CountBlocks)
 
         bnNew = PastDifficultyAverage
-        nTargetTimespan = CountBlocks * 90 #TODO 90 second
+        nTargetTimespan = CountBlocks * 90 #90 second
 
         nActualTimespan = max(nActualTimespan, nTargetTimespan//3)
         nActualTimespan = min(nActualTimespan, nTargetTimespan*3)
