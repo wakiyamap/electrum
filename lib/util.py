@@ -40,7 +40,7 @@ from .i18n import _
 import urllib.request, urllib.parse, urllib.error
 import queue
 
-base_units = {'MONA':8, 'mMONA':5, 'uMONA':2}
+base_units = {'ZENY':8, 'mZENY':5, 'uZENY':2}
 fee_levels = [_('Within 25 blocks'), _('Within 10 blocks'), _('Within 5 blocks'), _('Within 2 blocks'), _('In the next block')]
 
 def normalize_version(v):
@@ -435,7 +435,7 @@ def time_difference(distance_in_time, include_seconds):
         return "over %d years" % (round(distance_in_minutes / 525600))
 
 mainnet_block_explorers = {
-    'bchain.info': ('https://bchain.info/MONA',
+    'bchain.info': ('https://bchain.info/ZENY',
                         {'tx': 'tx', 'addr': 'addr'}),
     'insight.zenyco-ex.org': ('https://zeny.insight.zenyco-ex.org/insight',
                         {'tx': 'tx', 'addr': 'address'}),

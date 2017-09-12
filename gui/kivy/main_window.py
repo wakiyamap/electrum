@@ -241,7 +241,7 @@ class ElectrumWindow(App):
 
         App.__init__(self)#, **kwargs)
 
-        title = _('Electrum-MONA App')
+        title = _('Electrum-ZENY App')
         self.electrum_config = config = kwargs.get('config', None)
         self.language = config.get('language', 'en')
         self.network = network = kwargs.get('network', None)
@@ -675,8 +675,8 @@ class ElectrumWindow(App):
                 from plyer import notification
             icon = (os.path.dirname(os.path.realpath(__file__))
                     + '/../../' + self.icon)
-            notification.notify('Electrum-MONA', message,
-                            app_icon=icon, app_name='Electrum-MONA')
+            notification.notify('Electrum-ZENY', message,
+                            app_icon=icon, app_name='Electrum-ZENY')
         except ImportError:
             Logger.Error('Notification: needs plyer; `sudo pip install plyer`')
 

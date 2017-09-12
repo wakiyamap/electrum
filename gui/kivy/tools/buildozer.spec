@@ -1,10 +1,10 @@
 [app]
 
 # (str) Title of your application
-title = Electrum-MONA
+title = Electrum-ZENY
 
 # (str) Package name
-package.name = Electrum_MONA
+package.name = Electrum_ZENY
 
 # (str) Package domain (needed for android/ios packaging)
 package.domain = org.electrum_zeny
