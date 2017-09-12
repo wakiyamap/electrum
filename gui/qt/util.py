@@ -21,7 +21,7 @@ from PyQt4.QtCore import *
 if platform.system() == 'Windows':
     MONOSPACE_FONT = 'Lucida Console'
 elif platform.system() == 'Darwin':
-    MONOSPACE_FONT = 'Zenyco'
+    MONOSPACE_FONT = 'Monaco'
 else:
     MONOSPACE_FONT = 'monospace'
 
