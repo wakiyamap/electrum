@@ -585,6 +585,7 @@ class Abstract_Wallet(AddressSynchronizer):
 
     def get_invoices(self):
         out = [self.get_invoice(key) for key in self.invoices.keys()]
+        out = list(filter(None, out))
         out.sort(key=operator.itemgetter('time'))
         return out
 
@@ -1120,6 +1121,8 @@ class Abstract_Wallet(AddressSynchronizer):
                 fixed_outputs = old_not_is_mine
             else:
                 fixed_outputs = old_outputs
+        if not fixed_outputs:
+            raise CannotBumpFee(_('Cannot bump fee') + ': could not figure out which outputs to keep')
 
         coins = self.get_spendable_coins(None)
         for item in coins:
