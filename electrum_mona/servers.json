@@ -5,24 +5,6 @@
         "t": "50001",
         "version": "1.4"
     },
-    "electrumx2.tamami-foundation.org": {
-        "pruning": "-",
-        "s": "50002",
-        "t": "50001",
-        "version": "1.4"
-    },
-    "electrumx3.tamami-foundation.org": {
-        "pruning": "-",
-        "s": "50002",
-        "t": "50001",
-        "version": "1.4"
-    },
-    "electrumx2.monacoin.nl": {
-        "pruning": "-",
-        "s": "50002",
-        "t": "50001",
-        "version": "1.4"
-    },
     "electrumx3.monacoin.nl": {
         "pruning": "-",
         "s": "50002",
@@ -35,13 +17,31 @@
         "t": "50001",
         "version": "1.4"
     },
-    "electrumx2.monacoin.ninja": {
+    "electrum-mona.nope.work": {
         "pruning": "-",
         "s": "50002",
         "t": "50001",
         "version": "1.4"
     },
-    "electrum-mona.nope.work": {
+    "electrum.miningbeaver.ga": {
+        "pruning": "-",
+        "s": "50002",
+        "t": "50001",
+        "version": "1.4"
+    },
+    "102.67.136.247": {
+        "pruning": "-",
+        "s": "50002",
+        "t": "50001",
+        "version": "1.4"
+    },
+    "103.125.218.246": {
+        "pruning": "-",
+        "s": "50002",
+        "t": "50001",
+        "version": "1.4"
+    },
+    "133.167.67.203": {
         "pruning": "-",
         "s": "50002",
         "t": "50001",
