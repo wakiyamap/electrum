@@ -222,7 +222,7 @@ class TestCreateRestoreWallet(WalletTestCase):
         addr0 = wallet.get_receiving_addresses()[0]
         self.assertEqual('mona1q3g5tmkmlvxryhh843v4dz026avatc0zz8fpnsg', addr0)
         self.assertEqual('p2wpkh:T6v5Q8KEmjLmJoTxPfXfyNcCEFYC7Lfmwmp9Y8dce9knevo9ZkPk',
-                         wallet.export_private_key(addr0, password=None)[0])
+                         wallet.export_private_key(addr0, password=None))
         self.assertEqual(2, len(wallet.get_receiving_addresses()))
         # also test addr deletion
         wallet.delete_address('mona1q9pzjpjq4nqx5ycnywekcmycqz0wjp2nq7urx8j')
