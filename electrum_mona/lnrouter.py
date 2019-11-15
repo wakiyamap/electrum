@@ -74,7 +74,7 @@ class RouteEdge(NamedTuple):
     def is_sane_to_use(self, amount_msat: int) -> bool:
         # TODO revise ad-hoc heuristics
         # cltv cannot be more than 2 weeks
-        if self.cltv_expiry_delta > 14 * 144: return False
+        if self.cltv_expiry_delta > 14 * 960: return False
         total_fee = self.fee_for_edge(amount_msat)
         # fees below 50 sat are fine
         if total_fee > 50_000:
@@ -102,7 +102,7 @@ def is_route_sane_to_use(route: List[RouteEdge], invoice_amount_msat: int, min_f
     total_fee = amt - invoice_amount_msat
     # TODO revise ad-hoc heuristics
     # cltv cannot be more than 2 months
-    if cltv > 60 * 144: return False
+    if cltv > 60 * 960: return False
     # fees below 50 sat are fine
     if total_fee > 50_000:
         # fee cannot be higher than amt
