@@ -17,7 +17,7 @@ from electrum_mona.util import bfh, bh2u, versiontuple, UserFacingException
 from electrum_mona.base_wizard import ScriptTypeNotSupported
 from electrum_mona.logging import get_logger
 
-from ..hw_wallet import HW_PluginBase
+from ..hw_wallet import HW_PluginBase, HardwareClientBase
 from ..hw_wallet.plugin import is_any_tx_output_on_change_branch
 
 
@@ -61,7 +61,7 @@ def test_pin_unlocked(func):
     return catch_exception
 
 
-class Ledger_Client():
+class Ledger_Client(HardwareClientBase):
     def __init__(self, hidDevice):
         self.dongleObject = btchip(hidDevice)
         self.preflightDone = False
