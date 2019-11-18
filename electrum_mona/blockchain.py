@@ -41,7 +41,7 @@ HEADER_SIZE = 80  # bytes
 try:
     import lyra2re2_hash
 except ImportError as e:
-    sys.exit("Please run 'sudo pip3 install https://github.com/metalicjames/lyra2re-hash-python/archive/master.zip'")
+    sys.exit("Please run 'sudo pip3 install lyra2re2-hash'")
 
 from .scrypt import scrypt_1024_1_1_80 as scryptGetHash
 

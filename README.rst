@@ -64,6 +64,7 @@ Check out the code from GitHub::
 
 Need lyra2rev2_hash::
 
+    sudo apt install python3-dev(optional)
     pip3 install lyra2re2-hash
 
 Run install (this should install dependencies)::
