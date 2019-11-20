@@ -109,19 +109,19 @@ fi
 
 if [[ $1 == "open" ]]; then
     bob_node=$($bob nodeid)
-    channel_id1=$($alice open_channel $bob_node 0.002 --push_amount 0.001)
-    channel_id2=$($carol open_channel $bob_node 0.002 --push_amount 0.001)
+    channel_id1=$($alice open_channel $bob_node 0.2 --push_amount 0.1)
+    channel_id2=$($carol open_channel $bob_node 0.2 --push_amount 0.1)
     echo "mining 3 blocks"
     new_blocks 3
     sleep 10 # time for channelDB
 fi
 
 if [[ $1 == "alice_pays_carol" ]]; then
-    request=$($carol add_lightning_request 0.0001 -m "blah")
+    request=$($carol add_lightning_request 0.01 -m "blah")
     $alice lnpay $request
     carol_balance=$($carol list_channels | jq -r '.[0].local_balance')
     echo "carol balance: $carol_balance"
-    if [[ $carol_balance != 110000 ]]; then
+    if [[ $carol_balance != 11000000 ]]; then
         exit 1
     fi
 fi
