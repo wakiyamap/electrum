@@ -642,7 +642,7 @@ def format_fee_satoshis(fee, *, num_zeros=0, precision=None):
     return format_satoshis(fee, num_zeros=num_zeros, decimal_point=0, precision=precision)
 
 
-def quantize_feerate(fee):
+def quantize_feerate(fee) -> Union[None, Decimal, int]:
     """Strip sat/byte fee rate of excess precision."""
     if fee is None:
         return None
@@ -865,6 +865,15 @@ def create_bip21_uri(addr, amount_sat: Optional[int], message: Optional[str],
         query.append(f"{k}={v}")
     p = urllib.parse.ParseResult(scheme='monacoin', netloc='', path=addr, params='', query='&'.join(query), fragment='')
     return str(urllib.parse.urlunparse(p))
+
+
+def maybe_extract_bolt11_invoice(data: str) -> Optional[str]:
+    lower = data.lower()
+    if lower.startswith('lightning:ln'):
+        lower = lower[10:]
+    if lower.startswith('ln'):
+        return lower
+    return None
 
 
 # Python bug (http://bugs.python.org/issue1927) causes raw_input

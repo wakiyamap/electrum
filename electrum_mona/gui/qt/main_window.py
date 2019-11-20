@@ -38,32 +38,30 @@ import queue
 import asyncio
 from typing import Optional, TYPE_CHECKING, Sequence, List, Union
 
-from PyQt5.QtGui import QPixmap, QKeySequence, QIcon, QCursor, QFont
+from PyQt5.QtGui import QPixmap, QKeySequence, QIcon, QCursor
 from PyQt5.QtCore import Qt, QRect, QStringListModel, QSize, pyqtSignal
 from PyQt5.QtWidgets import (QMessageBox, QComboBox, QSystemTrayIcon, QTabWidget,
-                             QSpinBox, QMenuBar, QFileDialog, QCheckBox, QLabel,
-                             QVBoxLayout, QGridLayout, QLineEdit, QTreeWidgetItem,
+                             QMenuBar, QFileDialog, QCheckBox, QLabel,
+                             QVBoxLayout, QGridLayout, QLineEdit,
                              QHBoxLayout, QPushButton, QScrollArea, QTextEdit,
                              QShortcut, QMainWindow, QCompleter, QInputDialog,
-                             QWidget, QMenu, QSizePolicy, QStatusBar)
+                             QWidget, QSizePolicy, QStatusBar)
 
 import electrum_mona
-from electrum_mona import (keystore, simple_config, ecc, constants, util, bitcoin, commands,
-                      coinchooser, paymentrequest)
+from electrum_mona import (keystore, ecc, constants, util, bitcoin, commands,
+                      paymentrequest)
 from electrum_mona.bitcoin import COIN, is_address
 from electrum_mona.plugin import run_hook
 from electrum_mona.i18n import _
 from electrum_mona.util import (format_time, format_satoshis, format_fee_satoshis,
-                           format_satoshis_plain, NotEnoughFunds,
-                           UserCancelled, NoDynamicFeeEstimates, profiler,
+                           format_satoshis_plain,
+                           UserCancelled, profiler,
                            export_meta, import_meta, bh2u, bfh, InvalidPassword,
-                           base_units, base_units_list, base_unit_name_to_decimal_point,
-                           decimal_point_to_base_unit_name, quantize_feerate,
+                           decimal_point_to_base_unit_name,
                            UnknownBaseUnit, DECIMAL_POINT_DEFAULT, UserFacingException,
                            get_new_wallet_name, send_exception_to_crash_reporter,
-                           InvalidBitcoinURI, InvoiceError)
+                           InvalidBitcoinURI)
 from electrum_mona.util import PR_TYPE_ONCHAIN, PR_TYPE_LN
-from electrum_mona.lnutil import PaymentFailure, SENT, RECEIVED
 from electrum_mona.transaction import (Transaction, PartialTxInput,
                                   PartialTransaction, PartialTxOutput)
 from electrum_mona.address_synchronizer import AddTransactionException
@@ -74,7 +72,7 @@ from electrum_mona.network import Network, TxBroadcastError, BestEffortRequestFa
 from electrum_mona.exchange_rate import FxThread
 from electrum_mona.simple_config import SimpleConfig
 from electrum_mona.logging import Logger
-from electrum_mona.util import PR_PAID, PR_UNPAID, PR_INFLIGHT, PR_FAILED
+from electrum_mona.util import PR_PAID, PR_FAILED
 from electrum_mona.util import pr_expiration_values
 from electrum_mona.lnutil import ln_dummy_address
 
@@ -85,12 +83,12 @@ from .qrtextedit import ShowQRTextEdit, ScanQRTextEdit
 from .transaction_dialog import show_transaction
 from .fee_slider import FeeSlider
 from .util import (read_QIcon, ColorScheme, text_dialog, icon_path, WaitingDialog,
-                   WindowModalDialog, ChoicesLayout, HelpLabel, FromList, Buttons,
+                   WindowModalDialog, ChoicesLayout, HelpLabel, Buttons,
                    OkButton, InfoButton, WWLabel, TaskThread, CancelButton,
                    CloseButton, HelpButton, MessageBoxMixin, EnterButton,
-                   ButtonsLineEdit, CopyCloseButton, import_meta_gui, export_meta_gui,
+                   import_meta_gui, export_meta_gui,
                    filename_field, address_field, char_width_in_lineedit, webopen,
-                   MONOSPACE_FONT, TRANSACTION_FILE_EXTENSION_FILTER)
+                   TRANSACTION_FILE_EXTENSION_FILTER)
 from .util import ButtonsTextEdit
 from .installwizard import WIF_HELP_TEXT
 from .history_list import HistoryList, HistoryModel
@@ -1295,12 +1293,10 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
             is_sweep=False)
 
         tx = make_tx(None)
-        amount = tx.output_value()#sum(x.value_sats() for x in self.get_coins())
-        self.amount_e.setAmount(amount)
-        ## substract extra fee
-        #__, x_fee_amount = run_hook('get_tx_extra_fee', self.wallet, tx) or (None, 0)
-        #amount_after_all_fees = amount - x_fee_amount
-        #self.amount_e.setAmount(amount_after_all_fees)
+        amount = tx.output_value()
+        __, x_fee_amount = run_hook('get_tx_extra_fee', self.wallet, tx) or (None, 0)
+        amount_after_all_fees = amount - x_fee_amount
+        self.amount_e.setAmount(amount_after_all_fees)
 
     def get_contact_payto(self, key):
         _type, label = self.contacts.get(key)
@@ -1391,14 +1387,10 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
 
         return False  # no errors
 
-    def pay_lightning_invoice(self, invoice):
-        amount_sat = self.amount_e.get_amount()
+    def pay_lightning_invoice(self, invoice, amount_sat=None):
         attempts = LN_NUM_PAYMENT_ATTEMPTS
         def task():
-            try:
-                self.wallet.lnworker.pay(invoice, amount_sat, attempts)
-            except Exception as e:
-                self.show_error(str(e))
+            self.wallet.lnworker.pay(invoice, amount_sat, attempts)
         self.do_clear()
         self.wallet.thread.add(task)
         self.invoice_list.update()
@@ -1408,6 +1400,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
             return
         if status == PR_PAID:
             self.notify(_('Payment received') + '\n' + key)
+            self.need_update.set()
 
     def on_invoice_status(self, key, status):
         if key not in self.wallet.invoices:
@@ -1431,7 +1424,15 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
             if not self.wallet.lnworker:
                 self.show_error(_('Lightning is disabled'))
                 return
-            return self.wallet.lnworker.parse_bech32_invoice(invoice)
+            invoice_dict = self.wallet.lnworker.parse_bech32_invoice(invoice)
+            if invoice_dict.get('amount') is None:
+                amount = self.amount_e.get_amount()
+                if amount:
+                    invoice_dict['amount'] = amount
+                else:
+                    self.show_error(_('No amount'))
+                    return
+            return invoice_dict
         else:
             outputs = self.read_outputs()
             if self.check_send_tab_onchain_outputs_and_show_errors(outputs):
@@ -1464,7 +1465,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
 
     def do_pay_invoice(self, invoice):
         if invoice['type'] == PR_TYPE_LN:
-            self.pay_lightning_invoice(invoice['invoice'])
+            self.pay_lightning_invoice(invoice['invoice'], amount_sat=invoice['amount'])
         elif invoice['type'] == PR_TYPE_ONCHAIN:
             outputs = invoice['outputs']
             self.pay_onchain_dialog(self.get_coins(), outputs, invoice=invoice)
@@ -1478,7 +1479,9 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
     def get_manually_selected_coins(self) -> Sequence[PartialTxInput]:
         return self.utxo_list.get_spend_list()
 
-    def pay_onchain_dialog(self, inputs, outputs, invoice=None, external_keypairs=None):
+    def pay_onchain_dialog(self, inputs: Sequence[PartialTxInput],
+                           outputs: List[PartialTxOutput], *,
+                           invoice=None, external_keypairs=None) -> None:
         # trustedcoin requires this
         if run_hook('abort_send', self):
             return
@@ -1488,13 +1491,18 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
             outputs=outputs,
             fee=fee_est,
             is_sweep=is_sweep)
+        output_values = [x.value for x in outputs]
+        if output_values.count('!') > 1:
+            self.show_error(_("More than one output set to spend max"))
+            return
         if self.config.get('advanced_preview'):
-            self.preview_tx_dialog(make_tx, outputs, external_keypairs=external_keypairs, invoice=invoice)
+            self.preview_tx_dialog(make_tx=make_tx,
+                                   external_keypairs=external_keypairs,
+                                   invoice=invoice)
             return
 
-        output_values = [x.value for x in outputs]
         output_value = '!' if '!' in output_values else sum(output_values)
-        d = ConfirmTxDialog(self, make_tx, output_value, is_sweep)
+        d = ConfirmTxDialog(window=self, make_tx=make_tx, output_value=output_value, is_sweep=is_sweep)
         d.update_tx()
         if d.not_enough_funds:
             self.show_message(_('Not Enough Funds'))
@@ -1506,15 +1514,19 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
             def sign_done(success):
                 if success:
                     self.broadcast_or_show(tx, invoice=invoice)
-            self.sign_tx_with_password(tx, sign_done, password, external_keypairs)
+            self.sign_tx_with_password(tx, callback=sign_done, password=password,
+                                       external_keypairs=external_keypairs)
         else:
-            self.preview_tx_dialog(make_tx, outputs, external_keypairs=external_keypairs, invoice=invoice)
+            self.preview_tx_dialog(make_tx=make_tx,
+                                   external_keypairs=external_keypairs,
+                                   invoice=invoice)
 
-    def preview_tx_dialog(self, make_tx, outputs, external_keypairs=None, invoice=None):
-        d = PreviewTxDialog(make_tx, outputs, external_keypairs, window=self, invoice=invoice)
+    def preview_tx_dialog(self, *, make_tx, external_keypairs=None, invoice=None):
+        d = PreviewTxDialog(make_tx=make_tx, external_keypairs=external_keypairs,
+                            window=self, invoice=invoice)
         d.show()
 
-    def broadcast_or_show(self, tx, invoice=None):
+    def broadcast_or_show(self, tx, *, invoice=None):
         if not self.network:
             self.show_error(_("You can't broadcast a transaction without a live network connection."))
             self.show_transaction(tx, invoice=invoice)
@@ -1524,10 +1536,10 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
             self.broadcast_transaction(tx, invoice=invoice)
 
     @protected
-    def sign_tx(self, tx, callback, external_keypairs, password):
-        self.sign_tx_with_password(tx, callback, password, external_keypairs=external_keypairs)
+    def sign_tx(self, tx, *, callback, external_keypairs, password):
+        self.sign_tx_with_password(tx, callback=callback, password=password, external_keypairs=external_keypairs)
 
-    def sign_tx_with_password(self, tx: PartialTransaction, callback, password, external_keypairs=None):
+    def sign_tx_with_password(self, tx: PartialTransaction, *, callback, password, external_keypairs=None):
         '''Sign the transaction in a separate thread.  When done, calls
         the callback with a success code of True or False.
         '''
@@ -1603,7 +1615,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         # we need to know the fee before we broadcast, because the txid is required
         # however, the user must not be allowed to broadcast early
         make_tx = self.mktx_for_open_channel(funding_sat)
-        d = ConfirmTxDialog(self, make_tx, funding_sat, False)
+        d = ConfirmTxDialog(window=self, make_tx=make_tx, output_value=funding_sat, is_sweep=False)
         cancelled, is_send, password, funding_tx = d.run()
         if not is_send:
             return
@@ -1985,7 +1997,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
     def create_coincontrol_statusbar(self):
         self.coincontrol_sb = sb = QStatusBar()
         sb.setSizeGripEnabled(False)
-        sb.setFixedHeight(3 * char_width_in_lineedit())
+        #sb.setFixedHeight(3 * char_width_in_lineedit())
         sb.setStyleSheet('QStatusBar::item {border: None;} '
                          + ColorScheme.GREEN.as_stylesheet(True))
 

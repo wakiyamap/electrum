@@ -26,19 +26,17 @@
 from enum import IntEnum
 
 from PyQt5.QtCore import Qt, QItemSelectionModel
-from PyQt5.QtGui import QStandardItemModel, QStandardItem, QFont
+from PyQt5.QtGui import QStandardItemModel, QStandardItem
 from PyQt5.QtWidgets import QAbstractItemView
-from PyQt5.QtWidgets import QHeaderView, QMenu, QVBoxLayout, QGridLayout, QLabel, QTreeWidget, QTreeWidgetItem
+from PyQt5.QtWidgets import QMenu, QVBoxLayout, QTreeWidget, QTreeWidgetItem
 
 from electrum_mona.i18n import _
 from electrum_mona.util import format_time, PR_UNPAID, PR_PAID, PR_INFLIGHT
 from electrum_mona.util import get_request_status
 from electrum_mona.util import PR_TYPE_ONCHAIN, PR_TYPE_LN
 from electrum_mona.lnutil import format_short_channel_id
-from electrum_mona.bitcoin import COIN
-from electrum_mona import constants
 
-from .util import (MyTreeView, read_QIcon, MONOSPACE_FONT,
+from .util import (MyTreeView, read_QIcon,
                    import_meta_gui, export_meta_gui, pr_icons)
 from .util import CloseButton, Buttons
 from .util import WindowModalDialog

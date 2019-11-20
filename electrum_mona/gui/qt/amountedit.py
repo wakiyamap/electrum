@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 
 from decimal import Decimal
+from typing import Union
 
 from PyQt5.QtCore import pyqtSignal, Qt
-from PyQt5.QtGui import QPalette, QPainter, QFontMetrics
+from PyQt5.QtGui import QPalette, QPainter
 from PyQt5.QtWidgets import (QLineEdit, QStyle, QStyleOptionFrame)
 
 from .util import char_width_in_lineedit
@@ -71,7 +72,7 @@ class AmountEdit(MyLineEdit):
             painter.setPen(self.help_palette.brush(QPalette.Disabled, QPalette.Text).color())
             painter.drawText(textRect, Qt.AlignRight | Qt.AlignVCenter, self.base_unit())
 
-    def get_amount(self):
+    def get_amount(self) -> Union[None, Decimal, int]:
         try:
             return (int if self.is_int else Decimal)(str(self.text()))
         except:

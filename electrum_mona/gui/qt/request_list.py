@@ -26,19 +26,14 @@
 from enum import IntEnum
 
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
-from PyQt5.QtWidgets import QMenu, QHeaderView
+from PyQt5.QtWidgets import QMenu
 from PyQt5.QtCore import Qt, QItemSelectionModel
 
 from electrum_mona.i18n import _
-from electrum_mona.util import format_time, age, get_request_status
+from electrum_mona.util import format_time, get_request_status
 from electrum_mona.util import PR_TYPE_ONCHAIN, PR_TYPE_LN
-from electrum_mona.util import PR_UNPAID, PR_EXPIRED, PR_PAID, PR_UNKNOWN, PR_INFLIGHT, pr_tooltips
-from electrum_mona.lnutil import SENT, RECEIVED
+from electrum_mona.util import PR_PAID
 from electrum_mona.plugin import run_hook
-from electrum_mona.wallet import InternalAddressCorruption
-from electrum_mona.bitcoin import COIN
-from electrum_mona.lnaddr import lndecode
-import electrum_mona.constants as constants
 
 from .util import MyTreeView, pr_icons, read_QIcon, webopen
 

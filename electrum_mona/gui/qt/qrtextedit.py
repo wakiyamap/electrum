@@ -2,7 +2,6 @@ from PyQt5.QtWidgets import QFileDialog
 
 from electrum_mona.i18n import _
 from electrum_mona.plugin import run_hook
-from electrum_mona.simple_config import SimpleConfig
 
 from .util import ButtonsTextEdit, MessageBoxMixin, ColorScheme, get_parent_main_window
 
