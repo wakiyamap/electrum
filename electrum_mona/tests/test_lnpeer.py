@@ -16,6 +16,7 @@ from electrum_mona.lnpeer import Peer
 from electrum_mona.lnutil import LNPeerAddr, Keypair, privkey_to_pubkey
 from electrum_mona.lnutil import LightningPeerConnectionClosed, RemoteMisbehaving
 from electrum_mona.lnutil import PaymentFailure, LnLocalFeatures
+from electrum_mona.lnchannel import channel_states
 from electrum_mona.lnrouter import LNPathFinder
 from electrum_mona.channel_db import ChannelDB
 from electrum_mona.lnworker import LNWallet, NoPathFound
@@ -202,9 +203,9 @@ class TestPeer(ElectrumTestCase):
         w1.peer = p1
         w2.peer = p2
         # mark_open won't work if state is already OPEN.
-        # so set it to OPENING
-        self.alice_channel.set_state("OPENING")
-        self.bob_channel.set_state("OPENING")
+        # so set it to FUNDED
+        self.alice_channel._state = channel_states.FUNDED
+        self.bob_channel._state = channel_states.FUNDED
         # this populates the channel graph:
         p1.mark_open(self.alice_channel)
         p2.mark_open(self.bob_channel)

@@ -17,8 +17,7 @@ import time
 import copy
 
 from electrum_mona.crypto import sha256d, EncodeAES_base64, EncodeAES_bytes, DecodeAES_bytes, hmac_oneshot
-from electrum_mona.bitcoin import (TYPE_ADDRESS, push_script, var_int, public_key_to_p2pkh,
-                              is_address)
+from electrum_mona.bitcoin import public_key_to_p2pkh
 from electrum_mona.bip32 import BIP32Node, convert_bip32_intpath_to_strpath, is_all_public_derivation
 from electrum_mona import ecc
 from electrum_mona.ecc import msg_magic

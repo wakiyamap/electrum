@@ -261,7 +261,7 @@ class BaseTxDialog(QDialog, MessageBoxMixin):
     def copy_to_clipboard(self, *, tx: Transaction = None):
         if tx is None:
             tx = self.tx
-        self.main_window.app.clipboard().setText(str(tx))
+        self.main_window.do_copy(str(tx), title=_("Transaction"))
 
     def show_qr(self, *, tx: Transaction = None):
         if tx is None:
@@ -450,9 +450,9 @@ class BaseTxDialog(QDialog, MessageBoxMixin):
     def update_io(self):
         inputs_header_text = _("Inputs") + ' (%d)'%len(self.tx.inputs())
         if not self.finalized:
-            num_utxos = len(self.main_window.get_manually_selected_coins())
-            if num_utxos > 0:
-                inputs_header_text += f"  -  " + _("Coin selection active ({} UTXOs selected)").format(num_utxos)
+            selected_coins = self.main_window.get_manually_selected_coins()
+            if selected_coins is not None:
+                inputs_header_text += f"  -  " + _("Coin selection active ({} UTXOs selected)").format(len(selected_coins))
         self.inputs_header.setText(inputs_header_text)
         ext = QTextCharFormat()
         rec = QTextCharFormat()

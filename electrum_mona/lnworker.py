@@ -40,7 +40,10 @@ from .lnaddr import lnencode, LnAddr, lndecode
 from .ecc import der_sig_from_sig_string
 from .ecc_fast import is_using_fast_ecc
 from .lnchannel import Channel, ChannelJsonEncoder
+from .lnchannel import channel_states, peer_states
 from . import lnutil
+from .lnutil import funding_output_script
+from .bitcoin import redeem_script_to_address
 from .lnutil import (Outpoint, LNPeerAddr,
                      get_compressed_pubkey_from_bech32, extract_nodeid,
                      PaymentFailure, split_host_port, ConnStringFormatError,
@@ -50,7 +53,7 @@ from .lnutil import (Outpoint, LNPeerAddr,
                      UpdateAddHtlc, Direction, LnLocalFeatures, format_short_channel_id,
                      ShortChannelID)
 from .lnutil import ln_dummy_address
-from .transaction import PartialTxOutput
+from .transaction import PartialTxOutput, PartialTransaction, PartialTxInput
 from .lnonion import OnionFailureCode
 from .lnmsg import decode_msg
 from .i18n import _
@@ -70,24 +73,15 @@ PEER_RETRY_INTERVAL = 600  # seconds
 PEER_RETRY_INTERVAL_FOR_CHANNELS = 30  # seconds
 GRAPH_DOWNLOAD_SECONDS = 600
 
-FALLBACK_NODE_LIST_TESTNET = (
-    #LNPeerAddr('ecdsa.net', 9735, bfh('038370f0e7a03eded3e1d41dc081084a87f0afa1c5b22090b4f3abb391eb15d8ff')),
-    #LNPeerAddr('148.251.87.112', 9735, bfh('021a8bd8d8f1f2e208992a2eb755cdc74d44e66b6a0c924d3a3cce949123b9ce40')), # janus test server
-    #LNPeerAddr('122.199.61.90', 9735, bfh('038863cf8ab91046230f561cd5b386cbff8309fa02e3f0c3ed161a3aeb64a643b9')), # popular node https://1ml.com/testnet/node/038863cf8ab91046230f561cd5b386cbff8309fa02e3f0c3ed161a3aeb64a643b9
-)
+FALLBACK_NODE_LIST_TESTNET = [
+
+]
 
 FALLBACK_NODE_LIST_MAINNET = [
     LNPeerAddr('160.16.125.215', 9735, bfh('03aad108db2ad9e3e447f09831c1f56a45fc986b27a404021a8163d31613959c27')),
     LNPeerAddr('153.126.199.20', 9735, bfh('02da4ea946a047779e0f8cde531d1c381f794bcf35a14ce841e62e78d674601ce1')),
     LNPeerAddr('153.126.197.243', 9735, bfh('03421d2e363756a40698f287a30068eae220fd24c779368d03b85d70a70988b43c')),
     LNPeerAddr('51.15.43.0', 9735, bfh('033858fb82f08d57aeb640bbe2dd0c1e51aa804a68170885a7e10f93f3835731b3')),
-    #LNPeerAddr(host='52.168.166.221', port=9735, pubkey=b'\x02\x148+\xdc\xe7u\r\xfc\xb8\x12m\xf8\xe2\xb1-\xe3\x856\x90-\xc3j\xbc\xeb\xda\xee\xfd\xec\xa1\xdf\x82\x84'),
-    #LNPeerAddr(host='35.230.100.60', port=9735, pubkey=b'\x02?^5\x82qk\xed\x96\xf6\xf2l\xfc\xd8\x03~\x07GM{GC\xaf\xdc\x8b\x07\xe6\x92\xdfcFM~'),
-    #LNPeerAddr(host='40.69.71.114', port=9735, pubkey=b'\x02\x83\x03\x18,\x98\x85\xda\x93\xb3\xb2\\\x96!\xd2,\xf3Du\xe6<\x129B\xe4\x02\xabS\x0c\x05V\xe6u'),
-    #LNPeerAddr(host='62.210.110.5', port=9735, pubkey=b'\x02v\xe0\x9a&u\x92\xe7E\x1a\x93\x9c\x93,\xf6\x85\xf0uM\xe3\x82\xa3\xca\x85\xd2\xfb:\x86ML6Z\xd5'),
-    #LNPeerAddr(host='34.236.113.58', port=9735, pubkey=b'\x02\xfaP\xc7.\xe1\xe2\xeb_\x1bm\x9c02\x08\x0cL\x86Cs\xc4 \x1d\xfa)f\xaa4\xee\xe1\x05\x1f\x97'),
-    #LNPeerAddr(host='52.168.166.221', port=9735, pubkey=b'\x02\x148+\xdc\xe7u\r\xfc\xb8\x12m\xf8\xe2\xb1-\xe3\x856\x90-\xc3j\xbc\xeb\xda\xee\xfd\xec\xa1\xdf\x82\x84'),
-    #LNPeerAddr(host='34.236.113.58', port=9735, pubkey=b'\x02\xfaP\xc7.\xe1\xe2\xeb_\x1bm\x9c02\x08\x0cL\x86Cs\xc4 \x1d\xfa)f\xaa4\xee\xe1\x05\x1f\x97'),
 ]
 
 encoder = ChannelJsonEncoder()
@@ -388,17 +382,15 @@ class LNWallet(LNWorker):
         self.lnwatcher = LNWatcher(network)
         self.lnwatcher.start_network(network)
         self.network = network
-        self.network.register_callback(self.on_network_update, ['wallet_updated', 'network_updated', 'verified', 'fee'])  # thread safe
-        self.network.register_callback(self.on_channel_open, ['channel_open'])
-        self.network.register_callback(self.on_channel_closed, ['channel_closed'])
+        self.network.register_callback(self.on_update_open_channel, ['update_open_channel'])
+        self.network.register_callback(self.on_update_closed_channel, ['update_closed_channel'])
         for chan_id, chan in self.channels.items():
             self.lnwatcher.add_channel(chan.funding_outpoint.to_str(), chan.get_funding_address())
 
         super().start_network(network)
         for coro in [
                 self.maybe_listen(),
-                self.on_network_update('network_updated'),  # shortcut (don't block) if funding tx locked and verified
-                self.lnwatcher.on_network_update('network_updated'),  # ping watcher to check our channels
+                self.lnwatcher.on_network_update('network_updated'), # shortcut (don't block) if funding tx locked and verified
                 self.reestablish_peers_and_channels(),
                 self.sync_with_local_watchtower(),
                 self.sync_with_remote_watchtower(),
@@ -408,9 +400,20 @@ class LNWallet(LNWorker):
 
     def peer_closed(self, peer):
         for chan in self.channels_for_peer(peer.pubkey).values():
-            chan.set_state('DISCONNECTED')
+            chan.peer_state = peer_states.DISCONNECTED
             self.network.trigger_callback('channel', chan)
         self.peers.pop(peer.pubkey)
+
+    def get_channel_status(self, chan):
+        # status displayed in the GUI
+        cs = chan.get_state()
+        if chan.is_closed():
+            return cs.name
+        peer = self.peers.get(chan.node_id)
+        ps = chan.peer_state
+        if ps != peer_states.GOOD:
+            return ps.name
+        return cs.name
 
     def payment_completed(self, chan: Channel, direction: Direction,
                           htlc: UpdateAddHtlc):
@@ -592,19 +595,31 @@ class LNWallet(LNWorker):
         if it's also deep enough, also save to disk.
         Returns tuple (mined_deep_enough, num_confirmations).
         """
-        conf = self.lnwatcher.get_tx_height(chan.funding_outpoint.txid).conf
-        if conf > 0:
-            block_height, tx_pos = self.lnwatcher.get_txpos(chan.funding_outpoint.txid)
-            assert tx_pos >= 0
-            chan.short_channel_id_predicted = ShortChannelID.from_components(
-                block_height, tx_pos, chan.funding_outpoint.output_index)
-        if conf >= chan.constraints.funding_txn_minimum_depth > 0:
-            chan.short_channel_id = chan.short_channel_id_predicted
-            self.logger.info(f"save_short_channel_id: {chan.short_channel_id}")
-            self.save_channel(chan)
-            self.on_channels_updated()
-        else:
+        funding_txid = chan.funding_outpoint.txid
+        funding_idx = chan.funding_outpoint.output_index
+        conf = self.lnwatcher.get_tx_height(funding_txid).conf
+        if conf < chan.constraints.funding_txn_minimum_depth:
             self.logger.info(f"funding tx is still not at sufficient depth. actual depth: {conf}")
+            return
+        assert conf > 0
+        # check funding_tx amount and script
+        funding_tx = self.lnwatcher.db.get_transaction(funding_txid)
+        if not funding_tx:
+            self.logger.info(f"no funding_tx {funding_txid}")
+            return
+        outp = funding_tx.outputs()[funding_idx]
+        redeem_script = funding_output_script(chan.config[REMOTE], chan.config[LOCAL])
+        funding_address = redeem_script_to_address('p2wsh', redeem_script)
+        funding_sat = chan.constraints.capacity
+        if not (outp.address == funding_address and outp.value == funding_sat):
+            self.logger.info('funding outpoint mismatch')
+            return
+        block_height, tx_pos = self.lnwatcher.get_txpos(chan.funding_outpoint.txid)
+        assert tx_pos >= 0
+        chan.short_channel_id = ShortChannelID.from_components(
+            block_height, tx_pos, chan.funding_outpoint.output_index)
+        self.logger.info(f"save_short_channel_id: {chan.short_channel_id}")
+        self.save_channel(chan)
 
     def channel_by_txo(self, txo):
         with self.lock:
@@ -613,32 +628,69 @@ class LNWallet(LNWorker):
             if chan.funding_outpoint.to_str() == txo:
                 return chan
 
-    def on_channel_open(self, event, funding_outpoint, funding_txid, funding_height):
-        chan = self.channel_by_txo(funding_outpoint)
-        if not chan:
-            return
-        #self.logger.debug(f'on_channel_open {funding_outpoint}')
-        self.channel_timestamps[bh2u(chan.channel_id)] = funding_txid, funding_height.height, funding_height.timestamp, None, None, None
-        self.storage.put('lightning_channel_timestamps', self.channel_timestamps)
-        chan.set_funding_txo_spentness(False)
-        # send event to GUI
-        self.network.trigger_callback('channel', chan)
-
+    @ignore_exceptions
     @log_exceptions
-    async def on_channel_closed(self, event, funding_outpoint, spenders, funding_txid, funding_height, closing_txid, closing_height, closing_tx):
+    async def on_update_open_channel(self, event, funding_outpoint, funding_txid, funding_height):
         chan = self.channel_by_txo(funding_outpoint)
         if not chan:
             return
-        #self.logger.debug(f'on_channel_closed {funding_outpoint}')
+        if chan.get_state() == channel_states.OPEN and self.should_channel_be_closed_due_to_expiring_htlcs(chan):
+            self.logger.info(f"force-closing due to expiring htlcs")
+            await self.force_close_channel(chan.channel_id)
+            return
+
+        if chan.get_state() == channel_states.OPENING:
+            if chan.short_channel_id is None:
+                self.save_short_chan_id(chan)
+            if chan.short_channel_id:
+                chan.set_state(channel_states.FUNDED)
+                self.channel_timestamps[bh2u(chan.channel_id)] = chan.funding_outpoint.txid, funding_height.height, funding_height.timestamp, None, None, None
+                self.storage.put('lightning_channel_timestamps', self.channel_timestamps)
+
+        if chan.get_state() == channel_states.FUNDED:
+            peer = self.peers.get(chan.node_id)
+            if peer and peer.initialized.is_set():
+                peer.send_funding_locked(chan)
+
+        elif chan.get_state() == channel_states.OPEN:
+            peer = self.peers.get(chan.node_id)
+            if peer is None:
+                self.logger.info("peer not found for {}".format(bh2u(chan.node_id)))
+                return
+            if event == 'fee':
+                await peer.bitcoin_fee_update(chan)
+            conf = self.lnwatcher.get_tx_height(chan.funding_outpoint.txid).conf
+            peer.on_network_update(chan, conf)
+
+        elif chan.get_state() == channel_states.FORCE_CLOSING:
+            txid = chan.force_close_tx().txid()
+            height = self.lnwatcher.get_tx_height(txid).height
+            self.logger.info(f"force closing tx {txid}, height {height}")
+            if height == TX_HEIGHT_LOCAL:
+                self.logger.info('REBROADCASTING CLOSING TX')
+                await self.force_close_channel(chan.channel_id)
+
+    @ignore_exceptions
+    @log_exceptions
+    async def on_update_closed_channel(self, event, funding_outpoint, spenders, funding_txid, funding_height, closing_txid, closing_height, closing_tx, keep_watching):
+        chan = self.channel_by_txo(funding_outpoint)
+        if not chan:
+            return
+
+        # fixme: this is wasteful
         self.channel_timestamps[bh2u(chan.channel_id)] = funding_txid, funding_height.height, funding_height.timestamp, closing_txid, closing_height.height, closing_height.timestamp
         self.storage.put('lightning_channel_timestamps', self.channel_timestamps)
-        chan.set_funding_txo_spentness(True)
-        chan.set_state('CLOSED')
-        self.on_channels_updated()
-        self.network.trigger_callback('channel', chan)
+
         # remove from channel_db
         if chan.short_channel_id is not None:
             self.channel_db.remove_channel(chan.short_channel_id)
+
+        if chan.get_state() < channel_states.CLOSED:
+            chan.set_state(channel_states.CLOSED)
+
+        if chan.get_state() == channel_states.CLOSED and not keep_watching:
+            chan.set_state(channel_states.REDEEMED)
+
         # detect who closed and set sweep_info
         sweep_info_dict = chan.sweep_ctx(closing_tx)
         self.logger.info(f'sweep_info_dict length: {len(sweep_info_dict)}')
@@ -734,52 +786,14 @@ class LNWallet(LNWorker):
                                                        500_000)
         return total_value_sat > min_value_worth_closing_channel_over_sat
 
-    @ignore_exceptions
     @log_exceptions
-    async def on_network_update(self, event, *args):
-        # TODO
-        # Race discovered in save_channel (assertion failing):
-        # since short_channel_id could be changed while saving.
-        with self.lock:
-            channels = list(self.channels.values())
-        if event in ('verified', 'wallet_updated'):
-            if args[0] != self.lnwatcher:
-                return
-        for chan in channels:
-            if chan.is_closed():
-                continue
-            if chan.get_state() != 'CLOSED' and self.should_channel_be_closed_due_to_expiring_htlcs(chan):
-                self.logger.info(f"force-closing due to expiring htlcs")
-                await self.force_close_channel(chan.channel_id)
-                continue
-            if chan.short_channel_id is None:
-                self.save_short_chan_id(chan)
-            if chan.get_state() == "OPENING" and chan.short_channel_id:
-                peer = self.peers[chan.node_id]
-                peer.send_funding_locked(chan)
-            elif chan.get_state() == "OPEN":
-                peer = self.peers.get(chan.node_id)
-                if peer is None:
-                    self.logger.info("peer not found for {}".format(bh2u(chan.node_id)))
-                    return
-                if event == 'fee':
-                    await peer.bitcoin_fee_update(chan)
-                conf = self.lnwatcher.get_tx_height(chan.funding_outpoint.txid).conf
-                peer.on_network_update(chan, conf)
-            elif chan.force_closed and chan.get_state() != 'CLOSED':
-                txid = chan.force_close_tx().txid()
-                height = self.lnwatcher.get_tx_height(txid).height
-                self.logger.info(f"force closing tx {txid}, height {height}")
-                if height == TX_HEIGHT_LOCAL:
-                    self.logger.info('REBROADCASTING CLOSING TX')
-                    await self.force_close_channel(chan.channel_id)
-
-    @log_exceptions
-    async def _open_channel_coroutine(self, connect_str, funding_tx, funding_sat, push_sat, password):
+    async def _open_channel_coroutine(self, *, connect_str: str, funding_tx: PartialTransaction,
+                                      funding_sat: int, push_sat: int,
+                                      password: Optional[str]) -> Tuple[Channel, PartialTransaction]:
         peer = await self.add_peer(connect_str)
         # peer might just have been connected to
         await asyncio.wait_for(peer.initialized.wait(), LN_P2P_NETWORK_TIMEOUT)
-        chan = await peer.channel_establishment_flow(
+        chan, funding_tx = await peer.channel_establishment_flow(
             password,
             funding_tx=funding_tx,
             funding_sat=funding_sat,
@@ -787,11 +801,11 @@ class LNWallet(LNWorker):
             temp_channel_id=os.urandom(32))
         self.save_channel(chan)
         self.lnwatcher.add_channel(chan.funding_outpoint.to_str(), chan.get_funding_address())
-        self.on_channels_updated()
-        return chan
-
-    def on_channels_updated(self):
         self.network.trigger_callback('channels_updated', self.wallet)
+        if funding_tx.is_complete():
+            # TODO make more robust (timeout low? server returns error?)
+            await asyncio.wait_for(self.network.broadcast_transaction(funding_tx), LN_P2P_NETWORK_TIMEOUT)
+        return chan, funding_tx
 
     @log_exceptions
     async def add_peer(self, connect_str: str) -> Peer:
@@ -813,7 +827,8 @@ class LNWallet(LNWorker):
             peer = await self._add_peer(host, port, node_id)
         return peer
 
-    def mktx_for_open_channel(self, coins, funding_sat, fee_est):
+    def mktx_for_open_channel(self, *, coins: Sequence[PartialTxInput], funding_sat: int,
+                              fee_est=None) -> PartialTransaction:
         dummy_address = ln_dummy_address()
         outputs = [PartialTxOutput.from_address_and_value(dummy_address, funding_sat)]
         tx = self.wallet.make_unsigned_transaction(
@@ -823,15 +838,19 @@ class LNWallet(LNWorker):
         tx.set_rbf(False)
         return tx
 
-    def open_channel(self, connect_str, funding_tx, funding_sat, push_amt_sat, password=None, timeout=20):
-        assert funding_sat <= LN_MAX_FUNDING_SAT
-        coro = self._open_channel_coroutine(connect_str, funding_tx, funding_sat, push_amt_sat, password)
+    def open_channel(self, *, connect_str: str, funding_tx: PartialTransaction,
+                     funding_sat: int, push_amt_sat: int, password: str = None,
+                     timeout: Optional[int] = 20) -> Tuple[Channel, PartialTransaction]:
+        if funding_sat > LN_MAX_FUNDING_SAT:
+            raise Exception(_("Requested channel capacity is over protocol allowed maximum."))
+        coro = self._open_channel_coroutine(connect_str=connect_str, funding_tx=funding_tx, funding_sat=funding_sat,
+                                            push_sat=push_amt_sat, password=password)
         fut = asyncio.run_coroutine_threadsafe(coro, self.network.asyncio_loop)
         try:
-            chan = fut.result(timeout=timeout)
+            chan, funding_tx = fut.result(timeout=timeout)
         except concurrent.futures.TimeoutError:
             raise Exception(_("open_channel timed out"))
-        return chan
+        return chan, funding_tx
 
     def pay(self, invoice, amount_sat=None, attempts=1):
         """
@@ -1136,7 +1155,7 @@ class LNWallet(LNWorker):
         # note: currently we add *all* our channels; but this might be a privacy leak?
         for chan in channels:
             # check channel is open
-            if chan.get_state() != "OPEN":
+            if chan.get_state() != channel_states.OPEN:
                 continue
             # check channel has sufficient balance
             # FIXME because of on-chain fees of ctx, this check is insufficient
@@ -1193,7 +1212,7 @@ class LNWallet(LNWorker):
                     'channel_id': format_short_channel_id(chan.short_channel_id) if chan.short_channel_id else None,
                     'full_channel_id': bh2u(chan.channel_id),
                     'channel_point': chan.funding_outpoint.to_str(),
-                    'state': chan.get_state(),
+                    'state': chan.get_state().name,
                     'remote_pubkey': bh2u(chan.node_id),
                     'local_balance': chan.balance(LOCAL)//1000,
                     'remote_balance': chan.balance(REMOTE)//1000,
@@ -1207,9 +1226,7 @@ class LNWallet(LNWorker):
     async def force_close_channel(self, chan_id):
         chan = self.channels[chan_id]
         tx = chan.force_close_tx()
-        chan.set_force_closed()
-        self.save_channel(chan)
-        self.on_channels_updated()
+        chan.set_state(channel_states.FORCE_CLOSING)
         try:
             await self.network.broadcast_transaction(tx)
         except Exception as e:
@@ -1263,6 +1280,7 @@ class LNWallet(LNWorker):
                     if ratio < 0.5:
                         self.logger.warning(f"fee level for channel {bh2u(chan.channel_id)} is {chan_feerate} sat/kiloweight, "
                                             f"current recommended feerate is {self.current_feerate_per_kw()} sat/kiloweight, consider force closing!")
+                # reestablish
                 if not chan.should_try_to_reestablish_peer():
                     continue
                 peer = self.peers.get(chan.node_id, None)

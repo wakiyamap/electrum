@@ -591,9 +591,11 @@ def chunks(items, size: int):
         yield items[i: i + size]
 
 
-def format_satoshis_plain(x, decimal_point = 8):
+def format_satoshis_plain(x, decimal_point = 8) -> str:
     """Display a satoshi amount scaled.  Always uses a '.' as a decimal
     point and has no thousands separator"""
+    if x == '!':
+        return 'max'
     scale_factor = pow(10, decimal_point)
     return "{:.8f}".format(Decimal(x) / scale_factor).rstrip('0').rstrip('.')
 
@@ -999,7 +1001,7 @@ def ignore_exceptions(func):
 
 class TxMinedInfo(NamedTuple):
     height: int                        # height of block that mined tx
-    conf: Optional[int] = None         # number of confirmations (None means unknown)
+    conf: Optional[int] = None         # number of confirmations, SPV verified (None means unknown)
     timestamp: Optional[int] = None    # timestamp of block that mined tx
     txpos: Optional[int] = None        # position of tx in serialized block
     header_hash: Optional[str] = None  # hash of block that mined tx

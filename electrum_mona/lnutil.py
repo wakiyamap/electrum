@@ -28,7 +28,7 @@ HTLC_TIMEOUT_WEIGHT = 663
 HTLC_SUCCESS_WEIGHT = 703
 
 BTC_TO_MONA_CONVERSION_RATE = 600
-LN_MAX_FUNDING_SAT = pow(2, 24) * BTC_TO_MONA_CONVERSION_RATE
+LN_MAX_FUNDING_SAT = (pow(2, 24) * BTC_TO_MONA_CONVERSION_RATE) - 1
 
 # dummy address for fee estimation of funding tx
 def ln_dummy_address():

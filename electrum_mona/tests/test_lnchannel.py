@@ -34,6 +34,7 @@ from electrum_mona.lnutil import SENT, LOCAL, REMOTE, RECEIVED
 from electrum_mona.lnutil import FeeUpdate
 from electrum_mona.ecc import sig_string_from_der_sig
 from electrum_mona.logging import console_stderr_handler
+from electrum_mona.lnchannel import channel_states
 
 from . import ElectrumTestCase
 
@@ -94,6 +95,7 @@ def create_channel_state(funding_txid, funding_index, funding_sat, is_initiator,
             ),
             "node_id":other_node_id,
             'onion_keys': {},
+            'state': 'PREOPENING',
     }
 
 def bip32(sequence):
@@ -136,8 +138,8 @@ def create_test_channels(feerate=6000, local=None, remote=None):
     alice.hm.log[LOCAL]['ctn'] = 0
     bob.hm.log[LOCAL]['ctn'] = 0
 
-    alice.set_state('OPEN')
-    bob.set_state('OPEN')
+    alice._state = channel_states.OPEN
+    bob._state = channel_states.OPEN
 
     a_out = alice.get_latest_commitment(LOCAL).outputs()
     b_out = bob.get_next_commitment(REMOTE).outputs()

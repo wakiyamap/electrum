@@ -4,7 +4,6 @@ import sys
 from typing import NamedTuple, Any, Optional, Dict, Union, List, Tuple, TYPE_CHECKING
 
 from electrum_mona.util import bfh, bh2u, versiontuple, UserCancelled, UserFacingException
-from electrum_mona.bitcoin import TYPE_ADDRESS, TYPE_SCRIPT
 from electrum_mona.bip32 import BIP32Node
 from electrum_mona import constants
 from electrum_mona.i18n import _

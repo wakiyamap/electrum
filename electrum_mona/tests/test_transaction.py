@@ -2,7 +2,6 @@ from typing import NamedTuple, Union
 
 from electrum_mona import transaction, bitcoin
 from electrum_mona.transaction import convert_raw_tx_to_hex, tx_from_any, Transaction, PartialTransaction
-from electrum_mona.bitcoin import TYPE_ADDRESS
 from electrum_mona.util import bh2u, bfh
 from electrum_mona import keystore
 from electrum_mona import bip32
