@@ -200,7 +200,10 @@ class LNWorker(Logger):
                 if not addrs:
                     continue
                 host, port, timestamp = self.choose_preferred_address(list(addrs))
-                peer = LNPeerAddr(host, port, node_id)
+                try:
+                    peer = LNPeerAddr(host, port, node_id)
+                except ValueError:
+                    continue
                 if peer in self._last_tried_peer:
                     continue
                 #self.logger.info('taking random ln peer from our channel db')
@@ -1244,6 +1247,8 @@ class LNWallet(LNWorker):
         self.network.trigger_callback('channels_updated', self.wallet)
         self.network.trigger_callback('wallet_updated', self.wallet)
 
+    @ignore_exceptions
+    @log_exceptions
     async def reestablish_peer_for_given_channel(self, chan):
         now = time.time()
         # try last good address first
