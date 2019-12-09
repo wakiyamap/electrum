@@ -99,14 +99,7 @@ class TxEditor:
             self.tx = None
             self.main_window.show_error(str(e))
             raise
-        except BaseException as e:
-            self.tx = None
-            self.main_window.logger.exception('')
-            self.show_message(str(e))
-            return
-        #use_rbf = bool(self.config.get('use_rbf', True))
-        #if use_rbf:
-        #    self.tx.set_rbf(True)
+        # TODO monacoin is OK?
         use_rbf = bool(self.config.get('use_rbf', False))
         if use_rbf:
             self.tx.set_rbf(False)
