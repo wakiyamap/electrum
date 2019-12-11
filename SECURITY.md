@@ -16,3 +16,7 @@ Ensure that you put quotes around fingerprints containing spaces.
 
 These public keys can also be found in the Electrum git repository,
 in the top-level `pubkeys` folder.
+
+or
+
+You can use Keybase. https://keybase.io/wakiyamap
