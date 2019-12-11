@@ -11,7 +11,7 @@ from electrum_mona import bip32
 from electrum_mona.bip32 import BIP32Node, InvalidMasterKeyVersionBytes
 from electrum_mona.i18n import _
 from electrum_mona.plugin import Device, hook
-from electrum_mona.keystore import Hardware_KeyStore
+from electrum_mona.keystore import Hardware_KeyStore, KeyStoreWithMPK
 from electrum_mona.transaction import PartialTransaction
 from electrum_mona.wallet import Standard_Wallet, Multisig_Wallet, Abstract_Wallet
 from electrum_mona.util import bfh, bh2u, versiontuple, UserFacingException
@@ -20,10 +20,6 @@ from electrum_mona.logging import get_logger
 
 from ..hw_wallet import HW_PluginBase, HardwareClientBase
 from ..hw_wallet.plugin import LibraryFoundButUnusable, only_hook_if_libraries_available
-
-if TYPE_CHECKING:
-    from electrum_mona.keystore import Xpub
-
 
 _logger = get_logger(__name__)
 
@@ -571,7 +567,7 @@ class ColdcardPlugin(HW_PluginBase):
 
         xpubs = []
         derivs = set()
-        for xpub, ks in zip(wallet.get_master_public_keys(), wallet.get_keystores()):
+        for xpub, ks in zip(wallet.get_master_public_keys(), wallet.get_keystores()):  # type: str, KeyStoreWithMPK
             fp_bytes, der_full = ks.get_fp_and_derivation_to_be_used_in_partial_tx(der_suffix=[], only_der_suffix=False)
             fp_hex = fp_bytes.hex().upper()
             der_prefix_str = bip32.convert_bip32_intpath_to_strpath(der_full)
@@ -613,15 +609,15 @@ class ColdcardPlugin(HW_PluginBase):
             # all those keys
 
             pubkey_deriv_info = wallet.get_public_keys_with_deriv_info(address)
-            pubkeys = sorted([pk for pk in list(pubkey_deriv_info)])
+            pubkey_hexes = sorted([pk.hex() for pk in list(pubkey_deriv_info)])
             xfp_paths = []
-            for pubkey_hex in pubkey_deriv_info:
-                ks, der_suffix = pubkey_deriv_info[pubkey_hex]
+            for pubkey in pubkey_deriv_info:
+                ks, der_suffix = pubkey_deriv_info[pubkey]
                 fp_bytes, der_full = ks.get_fp_and_derivation_to_be_used_in_partial_tx(der_suffix, only_der_suffix=False)
                 xfp_int = xfp_int_from_xfp_bytes(fp_bytes)
                 xfp_paths.append([xfp_int] + list(der_full))
 
-            script = bfh(wallet.pubkeys_to_scriptcode(pubkeys))
+            script = bfh(wallet.pubkeys_to_scriptcode(pubkey_hexes))
 
             keystore.show_p2sh_address(wallet.m, script, xfp_paths, txin_type)
 

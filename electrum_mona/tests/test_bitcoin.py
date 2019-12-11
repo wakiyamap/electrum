@@ -157,7 +157,6 @@ class Test_bitcoin(ElectrumTestCase):
 
     @needs_test_with_all_ecc_implementations
     def test_msg_signing(self):
-        self.maxDiff = None
         msg1 = b'wakiyama tamami chan'
         msg2 = b'tottemo kawaii'
 

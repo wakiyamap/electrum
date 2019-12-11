@@ -1548,7 +1548,6 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
 
         output_value = '!' if '!' in output_values else sum(output_values)
         d = ConfirmTxDialog(window=self, make_tx=make_tx, output_value=output_value, is_sweep=is_sweep)
-        d.update_tx()
         if d.not_enough_funds:
             self.show_message(_('Not Enough Funds'))
             return
