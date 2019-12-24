@@ -113,7 +113,7 @@ pr_expiration_values = {
 
 def get_request_status(req):
     status = req['status']
-    exp = req.get('exp', 0)
+    exp = req.get('exp', 0) or 0
     if req['status'] == PR_UNPAID and exp > 0 and req['time'] + req['exp'] < time.time():
         status = PR_EXPIRED
     status_str = pr_tooltips[status]
@@ -458,7 +458,12 @@ def assert_file_in_datadir_available(path, config_path):
 
 
 def standardize_path(path):
-    return os.path.normcase(os.path.realpath(os.path.abspath(path)))
+    return os.path.normcase(
+            os.path.realpath(
+                os.path.abspath(
+                    os.path.expanduser(
+                        path
+    ))))
 
 
 def get_new_wallet_name(wallet_folder: str) -> str:
