@@ -33,7 +33,7 @@ import json
 import sys
 import ipaddress
 import asyncio
-from typing import NamedTuple, Optional, Sequence, List, Dict, Tuple, TYPE_CHECKING
+from typing import NamedTuple, Optional, Sequence, List, Dict, Tuple, TYPE_CHECKING, Iterable
 import traceback
 import concurrent
 from concurrent import futures
@@ -53,10 +53,11 @@ from .bitcoin import COIN
 from . import constants
 from . import blockchain
 from . import bitcoin
+from .transaction import Transaction
 from .blockchain import Blockchain, HEADER_SIZE
 from .interface import (Interface, serialize_server, deserialize_server,
                         RequestTimedOut, NetworkTimeout, BUCKET_NAME_OF_ONION_SERVERS,
-                        NetworkException)
+                        NetworkException, RequestCorrupted)
 from .version import PROTOCOL_VERSION
 from .simple_config import SimpleConfig
 from .i18n import _
@@ -66,7 +67,7 @@ if TYPE_CHECKING:
     from .channel_db import ChannelDB
     from .lnworker import LNGossip
     from .lnwatcher import WatchTower
-    from .transaction import Transaction
+    from .daemon import Daemon
 
 
 _logger = get_logger(__name__)
@@ -237,7 +238,7 @@ class Network(Logger):
 
     LOGGING_SHORTCUT = 'n'
 
-    def __init__(self, config: SimpleConfig):
+    def __init__(self, config: SimpleConfig, *, daemon: 'Daemon' = None):
         global _INSTANCE
         assert _INSTANCE is None, "Network is a singleton!"
         _INSTANCE = self
@@ -250,6 +251,9 @@ class Network(Logger):
 
         assert isinstance(config, SimpleConfig), f"config should be a SimpleConfig instead of {type(config)}"
         self.config = config
+
+        self.daemon = daemon
+
         blockchain.read_blockchains(self.config)
         self.logger.info(f"blockchains {list(map(lambda b: b.forkpoint, blockchain.blockchains.values()))}")
         self._blockchain_preferred_block = self.config.get('blockchain_preferred_block', None)  # type: Optional[Dict]
@@ -569,6 +573,9 @@ class Network(Logger):
                 # when dns-resolving. To speed it up drastically, we resolve dns ourselves, outside that lock.
                 # see #4421
                 socket.getaddrinfo = self._fast_getaddrinfo
+                resolver = dns.resolver.get_default_resolver()
+                if resolver.cache is None:
+                    resolver.cache = dns.resolver.Cache()
             else:
                 socket.getaddrinfo = socket._getaddrinfo
         self.trigger_callback('proxy_set', self.proxy)
@@ -749,7 +756,7 @@ class Network(Logger):
             self.trigger_callback('network_updated')
             if blockchain_updated: self.trigger_callback('blockchain_updated')
 
-    async def _close_interface(self, interface):
+    async def _close_interface(self, interface: Interface):
         if interface:
             with self.interfaces_lock:
                 if self.interfaces.get(interface.server) == interface:
@@ -869,7 +876,7 @@ class Network(Logger):
                     if success_fut.exception():
                         try:
                             raise success_fut.exception()
-                        except RequestTimedOut:
+                        except (RequestTimedOut, RequestCorrupted):
                             await iface.close()
                             await iface.got_disconnected
                             continue  # try again
@@ -1066,8 +1073,19 @@ class Network(Logger):
     async def get_transaction(self, tx_hash: str, *, timeout=None) -> str:
         if not is_hash256_str(tx_hash):
             raise Exception(f"{repr(tx_hash)} is not a txid")
-        return await self.interface.session.send_request('blockchain.transaction.get', [tx_hash],
-                                                         timeout=timeout)
+        iface = self.interface
+        raw = await iface.session.send_request('blockchain.transaction.get', [tx_hash], timeout=timeout)
+        # validate response
+        tx = Transaction(raw)
+        try:
+            tx.deserialize()  # see if raises
+        except Exception as e:
+            self.logger.warning(f"cannot deserialize received transaction (txid {tx_hash}). from {str(iface)}")
+            raise RequestCorrupted() from e  # TODO ban server?
+        if tx.txid() != tx_hash:
+            self.logger.warning(f"received tx does not match expected txid {tx_hash} (got {tx.txid()}). from {str(iface)}")
+            raise RequestCorrupted()  # TODO ban server?
+        return raw
 
     @best_effort_reliable
     @catch_server_exceptions
@@ -1187,7 +1205,12 @@ class Network(Logger):
 
         self.trigger_callback('network_updated')
 
-    def start(self, jobs: List=None):
+    def start(self, jobs: Iterable = None):
+        """Schedule starting the network, along with the given job co-routines.
+
+        Note: the jobs will *restart* every time the network restarts, e.g. on proxy
+        setting changes.
+        """
         self._jobs = jobs or []
         asyncio.run_coroutine_threadsafe(self._start(), self.asyncio_loop)
 
@@ -1266,7 +1289,7 @@ class Network(Logger):
             except asyncio.CancelledError:
                 # suppress spurious cancellations
                 group = self.main_taskgroup
-                if not group or group._closed:
+                if not group or group.closed():
                     raise
             await asyncio.sleep(0.1)
 

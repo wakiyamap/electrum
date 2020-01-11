@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Please update these carefully, some versions won't work under Wine
-NSIS_FILENAME=nsis-3.04-setup.exe
+NSIS_FILENAME=nsis-3.05-setup.exe
 NSIS_URL=https://prdownloads.sourceforge.net/nsis/$NSIS_FILENAME?download
-NSIS_SHA256=4e1db5a7400e348b1b46a4a11b6d9557fd84368e4ad3d4bc4c1be636c89638aa
+NSIS_SHA256=1a3cc9401667547b9b9327a177b13485f7c59c2303d4b6183e7bc9e6c8d6bfdb
 
 LYRA2RE_HASH_PYTHON_URL=https://github.com/wakiyamap/lyra2re-hash-python/releases/download/1.2.1/lyra2re2_hash-1.2.1-cp36-cp36m-win32.whl
 
@@ -16,8 +16,8 @@ LIBUSB_COMMIT=e782eeb2514266f6738e242cdcb18e3ae1ed06fa
 # ^ tag v1.0.23
 
 PYINSTALLER_REPO="https://github.com/SomberNight/pyinstaller.git"
-PYINSTALLER_COMMIT=46fc8155710631f84ebe20e32e0a6ba6df76d366
-# ^ tag 3.5, plus a custom commit that fixes cross-compilation with MinGW
+PYINSTALLER_COMMIT=e934539374e30d1500fcdbe8e4eb0860413935b2
+# ^ tag 3.6, plus a custom commit that fixes cross-compilation with MinGW
 
 PYTHON_VERSION=3.6.8
 
@@ -60,10 +60,10 @@ for msifile in core dev exe lib pip tools; do
 done
 
 info "Installing build dependencies."
-$PYTHON -m pip install --no-warn-script-location -r "$CONTRIB"/deterministic-build/requirements-wine-build.txt
+$PYTHON -m pip install --no-dependencies --no-warn-script-location -r "$CONTRIB"/deterministic-build/requirements-wine-build.txt
 
 info "Installing dependencies specific to binaries."
-$PYTHON -m pip install --no-warn-script-location -r "$CONTRIB"/deterministic-build/requirements-binaries.txt
+$PYTHON -m pip install --no-dependencies --no-warn-script-location -r "$CONTRIB"/deterministic-build/requirements-binaries.txt
 
 info "Installing ZBar."
 download_if_not_exist "$CACHEDIR/$ZBAR_FILENAME" "$ZBAR_URL"
@@ -132,7 +132,7 @@ info "Building PyInstaller."
     echo "const char *electrum_tag = \"tagged by Electrum@$ELECTRUM_COMMIT_HASH\";" >> ./bootloader/src/pyi_main.c
     pushd bootloader
     # cross-compile to Windows using host python
-    python3 ./waf all CC=i686-w64-mingw32-gcc CFLAGS="-Wno-stringop-overflow -static"
+    python3 ./waf all CC=i686-w64-mingw32-gcc CFLAGS="-static -Wno-dangling-else -Wno-error=unused-value"
     popd
     # sanity check bootloader is there:
     [[ -e PyInstaller/bootloader/Windows-32bit/runw.exe ]] || fail "Could not find runw.exe in target dir!"
