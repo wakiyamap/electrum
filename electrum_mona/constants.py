@@ -126,7 +126,9 @@ class BitcoinTestnet(AbstractNet):
     XPUB_HEADERS_INV = inv_dict(XPUB_HEADERS)
     BIP44_COIN_TYPE = 1
     LN_REALM_BYTE = 1
-    LN_DNS_SEEDS = []
+    LN_DNS_SEEDS = [
+        'testlnd.nodes.directory.',
+]
 
 
 class BitcoinRegtest(BitcoinTestnet):
