@@ -48,7 +48,7 @@ from .bip32 import BIP32Node
 from .crypto import sha256
 from .util import (NotEnoughFunds, UserCancelled, profiler,
                    format_satoshis, format_fee_satoshis, NoDynamicFeeEstimates,
-                   WalletFileException, BitcoinException,
+                   WalletFileException, BitcoinException, MultipleSpendMaxTxOutputs,
                    InvalidPassword, format_time, timestamp_to_datetime, Satoshis,
                    Fiat, bfh, bh2u, TxMinedInfo, quantize_feerate, create_bip21_uri, OrderedDictWithIndex)
 from .util import PR_TYPE_ONCHAIN, PR_TYPE_LN
@@ -616,6 +616,8 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         if invoice_type == PR_TYPE_LN:
             key = invoice['rhash']
         elif invoice_type == PR_TYPE_ONCHAIN:
+            if self.is_onchain_invoice_paid(invoice):
+                self.logger.info("saving invoice... but it is already paid!")
             key = bh2u(sha256(repr(invoice))[0:16])
             invoice['id'] = key
             outputs = invoice['outputs']  # type: List[PartialTxOutput]
@@ -645,7 +647,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         item = copy.copy(self.invoices[key])
         request_type = item.get('type')
         if request_type == PR_TYPE_ONCHAIN:
-            item['status'] = PR_PAID if self._is_onchain_invoice_paid(item)[0] else PR_UNPAID
+            item['status'] = PR_PAID if self.is_onchain_invoice_paid(item) else PR_UNPAID
         elif self.lnworker and request_type == PR_TYPE_LN:
             item['status'] = self.lnworker.get_payment_status(bfh(item['rhash']))
         else:
@@ -668,7 +670,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
                 for txout in outputs:
                     self._invoices_from_scriptpubkey_map[txout.scriptpubkey].add(invoice_key)
 
-    def _is_onchain_invoice_paid(self, invoice) -> Tuple[bool, Sequence[str]]:
+    def _is_onchain_invoice_paid(self, invoice: dict) -> Tuple[bool, Sequence[str]]:
         """Returns whether on-chain invoice is satisfied, and list of relevant TXIDs."""
         assert invoice.get('type') == PR_TYPE_ONCHAIN
         invoice_amounts = defaultdict(int)  # type: Dict[bytes, int]  # scriptpubkey -> value_sats
@@ -688,6 +690,9 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
                 if total_received < invoice_amt:
                     return False, []
         return True, relevant_txs
+
+    def is_onchain_invoice_paid(self, invoice: dict) -> bool:
+        return self._is_onchain_invoice_paid(invoice)[0]
 
     def _maybe_set_tx_label_based_on_invoices(self, tx: Transaction) -> bool:
         tx_hash = tx.txid()
@@ -995,7 +1000,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         for i, o in enumerate(outputs):
             if o.value == '!':
                 if i_max is not None:
-                    raise Exception("More than one output set to spend max")
+                    raise MultipleSpendMaxTxOutputs()
                 i_max = i
 
         if fee is None and self.config.fee_per_kb() is None:
