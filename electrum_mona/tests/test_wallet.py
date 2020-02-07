@@ -8,13 +8,13 @@ import time
 
 from io import StringIO
 from electrum_mona.storage import WalletStorage
-from electrum_mona.json_db import FINAL_SEED_VERSION
+from electrum_mona.wallet_db import FINAL_SEED_VERSION
 from electrum_mona.wallet import (Abstract_Wallet, Standard_Wallet, create_new_wallet,
                              restore_wallet_from_text, Imported_Wallet)
 from electrum_mona.exchange_rate import ExchangeBase, FxThread
 from electrum_mona.util import TxMinedInfo
 from electrum_mona.bitcoin import COIN
-from electrum_mona.json_db import JsonDB
+from electrum_mona.wallet_db import WalletDB
 from electrum_mona.simple_config import SimpleConfig
 
 from . import ElectrumTestCase
@@ -100,7 +100,7 @@ class FakeWallet:
     def __init__(self, fiat_value):
         super().__init__()
         self.fiat_value = fiat_value
-        self.db = JsonDB("{}", manual_upgrades=True)
+        self.db = WalletDB("{}", manual_upgrades=True)
         self.db.transactions = self.db.verified_tx = {'abc':'Tx'}
 
     def get_tx_height(self, txid):

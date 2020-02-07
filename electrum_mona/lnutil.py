@@ -7,6 +7,7 @@ import json
 from collections import namedtuple
 from typing import NamedTuple, List, Tuple, Mapping, Optional, TYPE_CHECKING, Union, Dict, Set, Sequence
 import re
+import attr
 
 from aiorpcx import NetAddress
 
@@ -38,74 +39,56 @@ LN_MAX_FUNDING_SAT = (pow(2, 24) * BTC_TO_MONA_CONVERSION_RATE) - 1
 def ln_dummy_address():
     return redeem_script_to_address('p2wsh', '')
 
-class Keypair(NamedTuple):
-    pubkey: bytes
-    privkey: bytes
+from .json_db import StoredObject
 
+@attr.s
+class OnlyPubkeyKeypair(StoredObject):
+    pubkey = attr.ib(type=bytes)
 
-class OnlyPubkeyKeypair(NamedTuple):
-    pubkey: bytes
+@attr.s
+class Keypair(OnlyPubkeyKeypair):
+    privkey = attr.ib(type=bytes)
 
+@attr.s
+class Config(StoredObject):
+    # shared channel config fields
+    payment_basepoint = attr.ib(type=OnlyPubkeyKeypair)
+    multisig_key = attr.ib(type=OnlyPubkeyKeypair)
+    htlc_basepoint = attr.ib(type=OnlyPubkeyKeypair)
+    delayed_basepoint = attr.ib(type=OnlyPubkeyKeypair)
+    revocation_basepoint = attr.ib(type=OnlyPubkeyKeypair)
+    to_self_delay = attr.ib(type=int)
+    dust_limit_sat = attr.ib(type=int)
+    max_htlc_value_in_flight_msat = attr.ib(type=int)
+    max_accepted_htlcs = attr.ib(type=int)
+    initial_msat = attr.ib(type=int)
+    reserve_sat = attr.ib(type=int)
 
-# NamedTuples cannot subclass NamedTuples :'(   https://github.com/python/typing/issues/427
-class LocalConfig(NamedTuple):
-    # shared channel config fields (DUPLICATED code!!)
-    payment_basepoint: 'Keypair'
-    multisig_key: 'Keypair'
-    htlc_basepoint: 'Keypair'
-    delayed_basepoint: 'Keypair'
-    revocation_basepoint: 'Keypair'
-    to_self_delay: int
-    dust_limit_sat: int
-    max_htlc_value_in_flight_msat: int
-    max_accepted_htlcs: int
-    initial_msat: int
-    reserve_sat: int
-    # specific to "LOCAL" config
-    per_commitment_secret_seed: bytes
-    funding_locked_received: bool
-    was_announced: bool
-    current_commitment_signature: Optional[bytes]
-    current_htlc_signatures: bytes
+@attr.s
+class LocalConfig(Config):
+    per_commitment_secret_seed = attr.ib(type=bytes)
+    funding_locked_received = attr.ib(type=bool)
+    was_announced = attr.ib(type=bool)
+    current_commitment_signature = attr.ib(type=bytes)
+    current_htlc_signatures = attr.ib(type=bytes)
 
+@attr.s
+class RemoteConfig(Config):
+    htlc_minimum_msat = attr.ib(type=int)
+    next_per_commitment_point = attr.ib(type=bytes)
+    current_per_commitment_point = attr.ib(default=None, type=bytes)
 
-class RemoteConfig(NamedTuple):
-    # shared channel config fields (DUPLICATED code!!)
-    payment_basepoint: Union['Keypair', 'OnlyPubkeyKeypair']
-    multisig_key: Union['Keypair', 'OnlyPubkeyKeypair']
-    htlc_basepoint: Union['Keypair', 'OnlyPubkeyKeypair']
-    delayed_basepoint: Union['Keypair', 'OnlyPubkeyKeypair']
-    revocation_basepoint: Union['Keypair', 'OnlyPubkeyKeypair']
-    to_self_delay: int
-    dust_limit_sat: int
-    max_htlc_value_in_flight_msat: int
-    max_accepted_htlcs: int
-    initial_msat: int
-    reserve_sat: int
-    # specific to "REMOTE" config
-    htlc_minimum_msat: int
-    next_per_commitment_point: bytes
-    revocation_store: 'RevocationStore'
-    current_per_commitment_point: Optional[bytes]
+@attr.s
+class FeeUpdate(StoredObject):
+    rate = attr.ib(type=int)  # in sat/kw
+    ctn_local = attr.ib(default=None, type=int)
+    ctn_remote = attr.ib(default=None, type=int)
 
-
-class FeeUpdate(NamedTuple):
-    rate: int  # in sat/kw
-    ctns: Dict['HTLCOwner', Optional[int]]
-
-    @classmethod
-    def from_dict(cls, d: dict) -> 'FeeUpdate':
-        return FeeUpdate(rate=d['rate'],
-                         ctns={LOCAL: d['ctns'][str(int(LOCAL))],
-                               REMOTE: d['ctns'][str(int(REMOTE))]})
-
-    def to_dict(self) -> dict:
-        return {'rate': self.rate,
-                'ctns': {int(LOCAL): self.ctns[LOCAL],
-                         int(REMOTE): self.ctns[REMOTE]}}
-
-
-ChannelConstraints = namedtuple("ChannelConstraints", ["capacity", "is_initiator", "funding_txn_minimum_depth"])
+@attr.s
+class ChannelConstraints(StoredObject):
+    capacity = attr.ib(type=int)
+    is_initiator = attr.ib(type=bool)
+    funding_txn_minimum_depth = attr.ib(type=int)
 
 
 class ScriptHtlc(NamedTuple):
@@ -114,7 +97,11 @@ class ScriptHtlc(NamedTuple):
 
 
 # FIXME duplicate of TxOutpoint in transaction.py??
-class Outpoint(NamedTuple("Outpoint", [('txid', str), ('output_index', int)])):
+@attr.s
+class Outpoint(StoredObject):
+    txid = attr.ib(type=str)
+    output_index = attr.ib(type=int)
+
     def to_str(self):
         return "{}:{}".format(self.txid, self.output_index)
 
@@ -188,25 +175,29 @@ class RevocationStore:
 
     START_INDEX = 2 ** 48 - 1
 
-    def __init__(self):
-        self.buckets = [None] * 49
-        self.index = self.START_INDEX
+    def __init__(self, storage):
+        if len(storage) == 0:
+            storage['index'] = self.START_INDEX
+            storage['buckets'] = {}
+        self.storage = storage
+        self.buckets = storage['buckets']
 
     def add_next_entry(self, hsh):
-        new_element = ShachainElement(index=self.index, secret=hsh)
-        bucket = count_trailing_zeros(self.index)
+        index = self.storage['index']
+        new_element = ShachainElement(index=index, secret=hsh)
+        bucket = count_trailing_zeros(index)
         for i in range(0, bucket):
             this_bucket = self.buckets[i]
             e = shachain_derive(new_element, this_bucket.index)
-
             if e != this_bucket:
                 raise Exception("hash is not derivable: {} {} {}".format(bh2u(e.secret), bh2u(this_bucket.secret), this_bucket.index))
         self.buckets[bucket] = new_element
-        self.index -= 1
+        self.storage['index'] = index - 1
 
     def retrieve_secret(self, index: int) -> bytes:
         assert index <= self.START_INDEX, index
-        for bucket in self.buckets:
+        for i in range(0, 49):
+            bucket = self.buckets.get(i)
             if bucket is None:
                 raise UnableToDeriveSecret()
             try:
@@ -215,17 +206,6 @@ class RevocationStore:
                 continue
             return element.secret
         raise UnableToDeriveSecret()
-
-    def serialize(self):
-        return {"index": self.index, "buckets": [[bh2u(k.secret), k.index] if k is not None else None for k in self.buckets]}
-
-    @staticmethod
-    def from_json_obj(decoded_json_obj):
-        store = RevocationStore()
-        decode = lambda to_decode: ShachainElement(bfh(to_decode[0]), int(to_decode[1]))
-        store.buckets = [k if k is None else decode(k) for k in decoded_json_obj["buckets"]]
-        store.index = decoded_json_obj["index"]
-        return store
 
     def __eq__(self, o):
         return type(o) is RevocationStore and self.serialize() == o.serialize()

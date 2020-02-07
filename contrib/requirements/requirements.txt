@@ -12,4 +12,5 @@ bitstring
 pycryptodomex>=3.7
 jsonrpcserver
 jsonrpcclient
-lyra2re2_hash>=1.2.0
+attrs
+lyra2re2_hash==1.2.0

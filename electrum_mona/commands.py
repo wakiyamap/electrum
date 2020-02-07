@@ -73,6 +73,14 @@ def satoshis(amount):
     return int(COIN*Decimal(amount)) if amount not in ['!', None] else amount
 
 
+def json_normalize(x):
+    # note: The return value of commands, when going through the JSON-RPC interface,
+    #       is json-encoded. The encoder used there cannot handle some types, e.g. electrum.util.Satoshis.
+    # note: We should not simply do "json_encode(x)" here, as then later x would get doubly json-encoded.
+    # see #5868
+    return json_decode(json_encode(x))
+
+
 class Command:
     def __init__(self, func, s):
         self.name = func.__name__
@@ -636,7 +644,7 @@ class Commands:
             from .exchange_rate import FxThread
             fx = FxThread(self.config, None)
             kwargs['fx'] = fx
-        return json_encode(wallet.get_detailed_history(**kwargs))
+        return json_normalize(wallet.get_detailed_history(**kwargs))
 
     @command('w')
     async def init_lightning(self, wallet: Abstract_Wallet = None):
@@ -653,7 +661,7 @@ class Commands:
     async def lightning_history(self, show_fiat=False, wallet: Abstract_Wallet = None):
         """ lightning history """
         lightning_history = wallet.lnworker.get_history() if wallet.lnworker else []
-        return json_encode(lightning_history)
+        return json_normalize(lightning_history)
 
     @command('w')
     async def setlabel(self, key, label, wallet: Abstract_Wallet = None):
@@ -985,6 +993,12 @@ class Commands:
         chan = wallet.lnworker.channels[chan_id]
         tx = chan.force_close_tx()
         return tx.serialize()
+
+    @command('wn')
+    async def get_watchtower_ctn(self, channel_point, wallet: Abstract_Wallet = None):
+        """ return the local watchtower's ctn of channel. used in regtests """
+        return await self.network.local_watchtower.sweepstore.get_ctn(channel_point, None)
+
 
 def eval_bool(x: str) -> bool:
     if x == 'false': return False
