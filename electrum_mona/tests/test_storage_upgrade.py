@@ -1,8 +1,9 @@
 import shutil
 import tempfile
 import os
+import json
 
-from electrum_mona.storage import WalletStorage
+from electrum_mona.wallet_db import WalletDB
 from electrum_mona.wallet import Wallet
 from electrum_mona import constants
 
@@ -41,7 +42,6 @@ class TestStorageUpgrade(WalletTestCase):
         wallet_str = '{"addr_history": {"P8ot4kcLZQaFfEV7RjVktxi7GQ1LUgDV1F": [],"P9HLyBSBSSy3JZ6cQYG6UkCiQoB6ZsPZ6Z": [],"PA9ZadzWaMXEEEBfmJy3ekhnpm3BU7mQyE": [],"PAFZUHzrhi8a3yfu9StTo7i1fy7xhc5GMp": [],"PAq4wHvvJsKLeFvRKtGA19Dj5gywwju5V2": [],"PCnkbJvEgHwmy6Lx6bvVYxUSziUpdmgx4i": [],"PDtrWfnff4DBcxGyBB1fnMpg7gv1XrYZsQ": [],"PEkj8tn89LfdKCr3AqC56BrXFKeoc1a3vP": [],"PF4BYeRwvnb8T6PXVfEw6zcVBEuujUqHCy": [],"PFAiWWB7TMVWyYmUPjE3489MhSSvTpFk1p": [],"PH94CH7MDa5tRkAkzGRwrMPuFhvTL5nsRL": [],"PHUSkFkwWP9hsMtjiBzkLyhP7NgEh3RjhA": [],"PL4NEabh2Q7yZEhY7TFSyq7JQEZ7zr65X2": [],"PPDDRcW6SvwcY68HBHPnFgQ1FmaRxCTWBf": [],"PPuJCCfP24gyUkLH8bVG4WJoFuw1Vktk47": [],"PQbo5pSf85CNH65W8zfXx1jVbvpkXFAH4q": [],"PRbupBpgfzRjoRGNqxERvzavJxRYPiDhfL": [],"PRnKJNuZpXDzJkWVTczMKUcQabWJVQX251": [],"PSJy76AemtebcepCwbsxnKoKVBwt94UbWD": [],"PSRoFQvkAmBqt151uNxH4ZB15NWVYC6JNQ": [],"PSTsTodTzJoHsHtUhCYoK5Lpu6TXHQ5Udm": [],"PSYcYiD1FaXpJAjFYkwN5opsrLMhQdphfz": [],"PSyjnkncpTntycMfaQTjdA7dDYWExKsnGD": [],"PT4Z5AjuZDCFXpFiDh8dcqujuGygadMkCd": [],"PVwTXpiNsH5gmaxHyCFinvXtByxhM3hSoF": [],"PWaXrnSr5QbnfYiwC6n1Tww8vs3BTUKRC6": [],"PWfGT1PQ5EXmrhjqJVeE4HUZcvNfhiRj9P": []},"addresses": {"change": ["P8ot4kcLZQaFfEV7RjVktxi7GQ1LUgDV1F","PRbupBpgfzRjoRGNqxERvzavJxRYPiDhfL","PPDDRcW6SvwcY68HBHPnFgQ1FmaRxCTWBf","PT4Z5AjuZDCFXpFiDh8dcqujuGygadMkCd","PAFZUHzrhi8a3yfu9StTo7i1fy7xhc5GMp","PH94CH7MDa5tRkAkzGRwrMPuFhvTL5nsRL"],"receiving": ["PVwTXpiNsH5gmaxHyCFinvXtByxhM3hSoF","PA9ZadzWaMXEEEBfmJy3ekhnpm3BU7mQyE","PL4NEabh2Q7yZEhY7TFSyq7JQEZ7zr65X2","PHUSkFkwWP9hsMtjiBzkLyhP7NgEh3RjhA","PPuJCCfP24gyUkLH8bVG4WJoFuw1Vktk47","PDtrWfnff4DBcxGyBB1fnMpg7gv1XrYZsQ","PEkj8tn89LfdKCr3AqC56BrXFKeoc1a3vP","PF4BYeRwvnb8T6PXVfEw6zcVBEuujUqHCy","PFAiWWB7TMVWyYmUPjE3489MhSSvTpFk1p","PAq4wHvvJsKLeFvRKtGA19Dj5gywwju5V2","PSyjnkncpTntycMfaQTjdA7dDYWExKsnGD","PSRoFQvkAmBqt151uNxH4ZB15NWVYC6JNQ","PSJy76AemtebcepCwbsxnKoKVBwt94UbWD","PSTsTodTzJoHsHtUhCYoK5Lpu6TXHQ5Udm","P9HLyBSBSSy3JZ6cQYG6UkCiQoB6ZsPZ6Z","PSYcYiD1FaXpJAjFYkwN5opsrLMhQdphfz","PRnKJNuZpXDzJkWVTczMKUcQabWJVQX251","PWaXrnSr5QbnfYiwC6n1Tww8vs3BTUKRC6","PWfGT1PQ5EXmrhjqJVeE4HUZcvNfhiRj9P","PCnkbJvEgHwmy6Lx6bvVYxUSziUpdmgx4i","PQbo5pSf85CNH65W8zfXx1jVbvpkXFAH4q"]},"pruned_txo": {},"seed_version": 14,"stored_height": 1479743,"transactions": {},"tx_fees": {},"txi": {},"txo": {},"use_encryption": false,"verified_tx3": {},"wallet_type": "2of2","winpos-qt": [100,100,840,400],"x1/": {"seed": "speed cruise market wasp ability alarm hold essay grass coconut tissue recipe","type": "bip32","xprv": "xprv9s21ZrQH143K48ig2wcAuZoEKaYdNRaShKFR3hLrgwsNW13QYRhXH6gAG1khxim6dw2RtAzF8RWbQxr1vvWUJFfEu2SJZhYbv6pfreMpuLB","xpub": "xpub661MyMwAqRbcGco98y9BGhjxscP7mtJJ4YB1r5kUFHQMNoNZ5y1mptze7J37JypkbrmBdnqTvSNzxL7cE1FrHg16qoj9S12MUpiYxVbTKQV"},"x2/": {"type": "bip32","xprv": null,"xpub": "xpub661MyMwAqRbcGrCDZaVs9VC7Z6579tsGvpqyDYZEHKg2MXoDkxhrWoukqvwDPXKdxVkYA6Hv9XHLETptfZfNpcJZmsUThdXXkTNGoBjQv1o"}}'
         self._upgrade_storage(wallet_str)
 
-
 ##########
 
     @classmethod
@@ -65,44 +65,33 @@ class TestStorageUpgrade(WalletTestCase):
     def _upgrade_storage(self, wallet_json, accounts=1):
         if accounts == 1:
             # test manual upgrades
-            storage = self._load_storage_from_json_string(wallet_json=wallet_json,
-                                                          path=self.wallet_path,
-                                                          manual_upgrades=True)
-            self.assertFalse(storage.requires_split())
-            if storage.requires_upgrade():
-                storage.upgrade()
-                self._sanity_check_upgraded_storage(storage)
+            db = self._load_db_from_json_string(wallet_json=wallet_json,
+                                                manual_upgrades=True)
+            self.assertFalse(db.requires_split())
+            if db.requires_upgrade():
+                db.upgrade()
+                self._sanity_check_upgraded_db(db)
             # test automatic upgrades
-            path2 = os.path.join(self.user_dir, "somewallet2")
-            storage2 = self._load_storage_from_json_string(wallet_json=wallet_json,
-                                                           path=path2,
-                                                           manual_upgrades=False)
-            storage2.write()
-            self._sanity_check_upgraded_storage(storage2)
-            # test opening upgraded storages again
-            s1 = WalletStorage(path2, manual_upgrades=False)
-            self._sanity_check_upgraded_storage(s1)
-            s2 = WalletStorage(path2, manual_upgrades=True)
-            self._sanity_check_upgraded_storage(s2)
+            db2 = self._load_db_from_json_string(wallet_json=wallet_json,
+                                                 manual_upgrades=False)
+            self._sanity_check_upgraded_db(db2)
         else:
-            storage = self._load_storage_from_json_string(wallet_json=wallet_json,
-                                                          path=self.wallet_path,
-                                                          manual_upgrades=True)
-            self.assertTrue(storage.requires_split())
-            new_paths = storage.split_accounts()
-            self.assertEqual(accounts, len(new_paths))
-            for new_path in new_paths:
-                new_storage = WalletStorage(new_path, manual_upgrades=False)
-                self._sanity_check_upgraded_storage(new_storage)
+            db = self._load_db_from_json_string(wallet_json=wallet_json,
+                                                manual_upgrades=True)
+            self.assertTrue(db.requires_split())
+            split_data = db.get_split_accounts()
+            self.assertEqual(accounts, len(split_data))
+            for item in split_data:
+                data = json.dumps(item)
+                new_db = WalletDB(data, manual_upgrades=False)
+                self._sanity_check_upgraded_db(new_db)
 
-    def _sanity_check_upgraded_storage(self, storage):
-        self.assertFalse(storage.requires_split())
-        self.assertFalse(storage.requires_upgrade())
-        w = Wallet(storage, config=self.config)
+    def _sanity_check_upgraded_db(self, db):
+        self.assertFalse(db.requires_split())
+        self.assertFalse(db.requires_upgrade())
+        w = Wallet(db, None, config=self.config)
 
     @staticmethod
-    def _load_storage_from_json_string(*, wallet_json, path, manual_upgrades):
-        with open(path, "w") as f:
-            f.write(wallet_json)
-        storage = WalletStorage(path, manual_upgrades=manual_upgrades)
-        return storage
+    def _load_db_from_json_string(*, wallet_json, manual_upgrades):
+        db = WalletDB(wallet_json, manual_upgrades=manual_upgrades)
+        return db
