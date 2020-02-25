@@ -208,13 +208,15 @@ class Satoshis(object):
 
     def __new__(cls, value):
         self = super(Satoshis, cls).__new__(cls)
+        # note: 'value' sometimes has msat precision
         self.value = value
         return self
 
     def __repr__(self):
-        return 'Satoshis(%d)'%self.value
+        return f'Satoshis({self.value})'
 
     def __str__(self):
+        # note: precision is truncated to satoshis here
         return format_satoshis(self.value)
 
     def __eq__(self, other):
@@ -425,11 +427,26 @@ def profiler(func):
     return lambda *args, **kw_args: do_profile(args, kw_args)
 
 
+def android_ext_dir():
+    from android.storage import primary_external_storage_path
+    return primary_external_storage_path()
+
+def android_backup_dir():
+    d = os.path.join(android_ext_dir(), 'org.electrum.electrum')
+    if not os.path.exists(d):
+        os.mkdir(d)
+    return d
+
 def android_data_dir():
     import jnius
     PythonActivity = jnius.autoclass('org.kivy.android.PythonActivity')
     return PythonActivity.mActivity.getFilesDir().getPath() + '/data'
 
+def get_backup_dir(config):
+    if 'ANDROID_DATA' in os.environ:
+        return android_backup_dir() if config.get('android_backups') else None
+    else:
+        return config.get('backup_dir')
 
 def ensure_sparse_file(filename):
     # On modern Linux, no need to do anything.
@@ -549,7 +566,9 @@ def xor_bytes(a: bytes, b: bytes) -> bytes:
 
 
 def user_dir():
-    if 'ANDROID_DATA' in os.environ:
+    if "ELECTRUMDIR" in os.environ:
+        return os.environ["ELECTRUMDIR"]
+    elif 'ANDROID_DATA' in os.environ:
         return android_data_dir()
     elif os.name == 'posix':
         return os.path.join(os.environ["HOME"], ".electrum-mona")

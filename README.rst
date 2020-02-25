@@ -85,10 +85,6 @@ Run install (this should install dependencies)::
 
     python3 -m pip install --user .
 
-Compile the protobuf description file::
-
-    sudo apt-get install protobuf-compiler
-    protoc --proto_path=electrum_mona --python_out=electrum_mona electrum_mona/paymentrequest.proto
 
 Create translations (optional)::
 

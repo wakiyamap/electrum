@@ -945,7 +945,15 @@ class Commands:
 
     @command('wn')
     async def lnpay(self, invoice, attempts=1, timeout=10, wallet: Abstract_Wallet = None):
-        return await wallet.lnworker._pay(invoice, attempts=attempts)
+        lnworker = wallet.lnworker
+        lnaddr = lnworker._check_invoice(invoice, None)
+        payment_hash = lnaddr.paymenthash
+        success = await lnworker._pay(invoice, attempts=attempts)
+        return {
+            'payment_hash': payment_hash.hex(),
+            'success': success,
+            'preimage': lnworker.get_preimage(payment_hash).hex() if success else None,
+        }
 
     @command('w')
     async def nodeid(self, wallet: Abstract_Wallet = None):
@@ -954,7 +962,23 @@ class Commands:
 
     @command('w')
     async def list_channels(self, wallet: Abstract_Wallet = None):
-        return list(wallet.lnworker.list_channels())
+        # we output the funding_outpoint instead of the channel_id because lnd uses channel_point (funding outpoint) to identify channels
+        from .lnutil import LOCAL, REMOTE, format_short_channel_id
+        encoder = util.MyEncoder()
+        l = list(wallet.lnworker.channels.items())
+        return [
+            {
+                'local_htlcs': json.loads(encoder.encode(chan.hm.log[LOCAL])),
+                'remote_htlcs': json.loads(encoder.encode(chan.hm.log[REMOTE])),
+                'channel_id': format_short_channel_id(chan.short_channel_id) if chan.short_channel_id else None,
+                'full_channel_id': bh2u(chan.channel_id),
+                'channel_point': chan.funding_outpoint.to_str(),
+                'state': chan.get_state().name,
+                'remote_pubkey': bh2u(chan.node_id),
+                'local_balance': chan.balance(LOCAL)//1000,
+                'remote_balance': chan.balance(REMOTE)//1000,
+            } for channel_id, chan in l
+        ]
 
     @command('wn')
     async def dumpgraph(self, wallet: Abstract_Wallet = None):
@@ -973,10 +997,6 @@ class Commands:
     @command('w')
     async def list_invoices(self, wallet: Abstract_Wallet = None):
         return wallet.get_invoices()
-
-    @command('w')
-    async def lightning_history(self, wallet: Abstract_Wallet = None):
-        return wallet.lnworker.get_history()
 
     @command('wn')
     async def close_channel(self, channel_point, force=False, wallet: Abstract_Wallet = None):

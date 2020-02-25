@@ -36,6 +36,7 @@ import aiohttp
 try:
     from . import paymentrequest_pb2 as pb2
 except ImportError:
+    # sudo apt-get install protobuf-compiler
     sys.exit("Error: could not find paymentrequest_pb2.py. Create it with 'protoc --proto_path=electrum_mona/ --python_out=electrum_mona/ electrum_mona/paymentrequest.proto'")
 
 from . import bitcoin, ecc, util, transaction, x509, rsakey
@@ -51,8 +52,8 @@ from .logging import get_logger, Logger
 _logger = get_logger(__name__)
 
 
-REQUEST_HEADERS = {'Accept': 'application/bitcoin-paymentrequest', 'User-Agent': 'Electrum'}
-ACK_HEADERS = {'Content-Type':'application/bitcoin-payment','Accept':'application/bitcoin-paymentack','User-Agent':'Electrum'}
+REQUEST_HEADERS = {'Accept': 'application/monacoin-paymentrequest', 'User-Agent': 'Electrum'}
+ACK_HEADERS = {'Content-Type':'application/monacoin-payment','Accept':'application/monacoin-paymentack','User-Agent':'Electrum'}
 
 ca_path = certifi.where()
 ca_list = None

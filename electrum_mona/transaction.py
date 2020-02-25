@@ -244,7 +244,8 @@ class BCDataStream(object):
         self.input = None
         self.read_cursor = 0
 
-    def write(self, _bytes):  # Initialize with string of _bytes
+    def write(self, _bytes: Union[bytes, bytearray]):  # Initialize with string of _bytes
+        assert isinstance(_bytes, (bytes, bytearray))
         if self.input is None:
             self.input = bytearray(_bytes)
         else:
@@ -271,20 +272,26 @@ class BCDataStream(object):
         self.write_compact_size(len(string))
         self.write(string)
 
-    def read_bytes(self, length) -> bytes:
-        try:
-            result = self.input[self.read_cursor:self.read_cursor+length]  # type: bytearray
+    def read_bytes(self, length: int) -> bytes:
+        if self.input is None:
+            raise SerializationError("call write(bytes) before trying to deserialize")
+        assert length >= 0
+        input_len = len(self.input)
+        read_begin = self.read_cursor
+        read_end = read_begin + length
+        if 0 <= read_begin <= read_end <= input_len:
+            result = self.input[read_begin:read_end]  # type: bytearray
             self.read_cursor += length
             return bytes(result)
-        except IndexError:
-            raise SerializationError("attempt to read past end of buffer") from None
+        else:
+            raise SerializationError('attempt to read past end of buffer')
 
     def can_read_more(self) -> bool:
         if not self.input:
             return False
         return self.read_cursor < len(self.input)
 
-    def read_boolean(self): return self.read_bytes(1)[0] != chr(0)
+    def read_boolean(self) -> bool: return self.read_bytes(1) != b'\x00'
     def read_int16(self): return self._read_num('<h')
     def read_uint16(self): return self._read_num('<H')
     def read_int32(self): return self._read_num('<i')
@@ -292,7 +299,7 @@ class BCDataStream(object):
     def read_int64(self): return self._read_num('<q')
     def read_uint64(self): return self._read_num('<Q')
 
-    def write_boolean(self, val): return self.write(chr(1) if val else chr(0))
+    def write_boolean(self, val): return self.write(b'\x01' if val else b'\x00')
     def write_int16(self, val): return self._write_num('<h', val)
     def write_uint16(self, val): return self._write_num('<H', val)
     def write_int32(self, val): return self._write_num('<i', val)
@@ -390,20 +397,32 @@ class OPPushDataGeneric:
 
 
 OPPushDataPubkey = OPPushDataGeneric(lambda x: x in (33, 65))
-# note that this does not include x_pubkeys !
+
+SCRIPTPUBKEY_TEMPLATE_P2PKH = [opcodes.OP_DUP, opcodes.OP_HASH160,
+                               OPPushDataGeneric(lambda x: x == 20),
+                               opcodes.OP_EQUALVERIFY, opcodes.OP_CHECKSIG]
+SCRIPTPUBKEY_TEMPLATE_P2SH = [opcodes.OP_HASH160, OPPushDataGeneric(lambda x: x == 20), opcodes.OP_EQUAL]
+SCRIPTPUBKEY_TEMPLATE_WITNESS_V0 = [opcodes.OP_0, OPPushDataGeneric(lambda x: x in (20, 32))]
 
 
-def match_decoded(decoded, to_match):
-    if decoded is None:
+def match_script_against_template(script, template) -> bool:
+    """Returns whether 'script' matches 'template'."""
+    if script is None:
         return False
-    if len(decoded) != len(to_match):
+    # optionally decode script now:
+    if isinstance(script, (bytes, bytearray)):
+        try:
+            script = [x for x in script_GetOp(script)]
+        except MalformedBitcoinScript:
+            return False
+    if len(script) != len(template):
         return False
-    for i in range(len(decoded)):
-        to_match_item = to_match[i]
-        decoded_item = decoded[i]
-        if OPPushDataGeneric.is_instance(to_match_item) and to_match_item.check_data_len(decoded_item[0]):
+    for i in range(len(script)):
+        template_item = template[i]
+        script_item = script[i]
+        if OPPushDataGeneric.is_instance(template_item) and template_item.check_data_len(script_item[0]):
             continue
-        if to_match_item != decoded_item[0]:
+        if template_item != script_item[0]:
             return False
     return True
 
@@ -412,28 +431,25 @@ def get_address_from_output_script(_bytes: bytes, *, net=None) -> Optional[str]:
     try:
         decoded = [x for x in script_GetOp(_bytes)]
     except MalformedBitcoinScript:
-        decoded = None
+        return None
 
     # p2pkh
-    match = [opcodes.OP_DUP, opcodes.OP_HASH160, OPPushDataGeneric(lambda x: x == 20), opcodes.OP_EQUALVERIFY, opcodes.OP_CHECKSIG]
-    if match_decoded(decoded, match):
+    if match_script_against_template(decoded, SCRIPTPUBKEY_TEMPLATE_P2PKH):
         return hash160_to_p2pkh(decoded[2][1], net=net)
 
     # p2sh
-    match = [opcodes.OP_HASH160, OPPushDataGeneric(lambda x: x == 20), opcodes.OP_EQUAL]
-    if match_decoded(decoded, match):
+    if match_script_against_template(decoded, SCRIPTPUBKEY_TEMPLATE_P2SH):
         return hash160_to_p2sh(decoded[1][1], net=net)
 
     # segwit address (version 0)
-    match = [opcodes.OP_0, OPPushDataGeneric(lambda x: x in (20, 32))]
-    if match_decoded(decoded, match):
+    if match_script_against_template(decoded, SCRIPTPUBKEY_TEMPLATE_WITNESS_V0):
         return hash_to_segwit_addr(decoded[1][1], witver=0, net=net)
 
     # segwit address (version 1-16)
     future_witness_versions = list(range(opcodes.OP_1, opcodes.OP_16 + 1))
     for witver, opcode in enumerate(future_witness_versions, start=1):
         match = [opcode, OPPushDataGeneric(lambda x: 2 <= x <= 40)]
-        if match_decoded(decoded, match):
+        if match_script_against_template(decoded, match):
             return hash_to_segwit_addr(decoded[1][1], witver=witver, net=net)
 
     return None
@@ -1348,14 +1364,13 @@ class PartialTxInput(TxInput, PSBTSection):
                 except MalformedBitcoinScript:
                     decoded = None
                 # witness version 0
-                match = [opcodes.OP_0, OPPushDataGeneric(lambda x: x in (20, 32))]
-                if match_decoded(decoded, match):
+                if match_script_against_template(decoded, SCRIPTPUBKEY_TEMPLATE_WITNESS_V0):
                     return True
                 # witness version 1-16
                 future_witness_versions = list(range(opcodes.OP_1, opcodes.OP_16 + 1))
                 for witver, opcode in enumerate(future_witness_versions, start=1):
                     match = [opcode, OPPushDataGeneric(lambda x: 2 <= x <= 40)]
-                    if match_decoded(decoded, match):
+                    if match_script_against_template(decoded, match):
                         return True
                 return False
 

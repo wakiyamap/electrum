@@ -18,7 +18,7 @@ from electrum_mona.lnpeer import Peer
 from electrum_mona.lnutil import LNPeerAddr, Keypair, privkey_to_pubkey
 from electrum_mona.lnutil import LightningPeerConnectionClosed, RemoteMisbehaving
 from electrum_mona.lnutil import PaymentFailure, LnLocalFeatures
-from electrum_mona.lnchannel import channel_states, peer_states
+from electrum_mona.lnchannel import channel_states, peer_states, Channel
 from electrum_mona.lnrouter import LNPathFinder
 from electrum_mona.channel_db import ChannelDB
 from electrum_mona.lnworker import LNWallet, NoPathFound
@@ -64,7 +64,7 @@ class MockNetwork:
     def get_local_height(self):
         return 0
 
-    async def broadcast_transaction(self, tx):
+    async def try_broadcasting(self, tx, name):
         if self.tx_queue:
             await self.tx_queue.put(tx)
 
@@ -73,9 +73,11 @@ class MockWallet:
         pass
     def save_db(self):
         pass
+    def is_lightning_backup(self):
+        return False
 
 class MockLNWallet:
-    def __init__(self, remote_keypair, local_keypair, chan, tx_queue):
+    def __init__(self, remote_keypair, local_keypair, chan: 'Channel', tx_queue):
         self.remote_keypair = remote_keypair
         self.node_keypair = local_keypair
         self.network = MockNetwork(tx_queue)
@@ -86,6 +88,8 @@ class MockLNWallet:
         self.localfeatures = LnLocalFeatures(0)
         self.localfeatures |= LnLocalFeatures.OPTION_DATA_LOSS_PROTECT_OPT
         self.pending_payments = defaultdict(asyncio.Future)
+        chan.lnworker = self
+        chan.node_id = remote_keypair.pubkey
 
     def get_invoice_status(self, key):
         pass
@@ -125,6 +129,7 @@ class MockLNWallet:
     _pay_to_route = LNWallet._pay_to_route
     force_close_channel = LNWallet.force_close_channel
     get_first_timestamp = lambda self: 0
+    payment_completed = LNWallet.payment_completed
 
 class MockTransport:
     def __init__(self, name):
@@ -238,10 +243,18 @@ class TestPeer(ElectrumTestCase):
         alice_channel_0, bob_channel_0 = create_test_channels() # these are identical
         p1, p2, w1, w2, _q1, _q2 = self.prepare_peers(alice_channel, bob_channel)
         pay_req = self.prepare_invoice(w2)
-        async def reestablish():
+        async def pay():
             result = await LNWallet._pay(w1, pay_req)
             self.assertEqual(result, True)
-            w1.channels = {alice_channel_0.channel_id: alice_channel_0}
+            gath.cancel()
+        gath = asyncio.gather(pay(), p1._message_loop(), p2._message_loop())
+        async def f():
+            await gath
+        with self.assertRaises(concurrent.futures.CancelledError):
+            run(f())
+
+        p1, p2, w1, w2, _q1, _q2 = self.prepare_peers(alice_channel_0, bob_channel)
+        async def reestablish():
             await asyncio.gather(
                 p1.reestablish_channel(alice_channel_0),
                 p2.reestablish_channel(bob_channel))
@@ -262,7 +275,25 @@ class TestPeer(ElectrumTestCase):
         pay_req = self.prepare_invoice(w2)
         async def pay():
             result = await LNWallet._pay(w1, pay_req)
-            self.assertEqual(result, True)
+            self.assertTrue(result)
+            gath.cancel()
+        gath = asyncio.gather(pay(), p1._message_loop(), p2._message_loop())
+        async def f():
+            await gath
+        with self.assertRaises(concurrent.futures.CancelledError):
+            run(f())
+
+    def test_close(self):
+        alice_channel, bob_channel = create_test_channels()
+        p1, p2, w1, w2, _q1, _q2 = self.prepare_peers(alice_channel, bob_channel)
+        w1.network.config.set_key('dynamic_fees', False)
+        w2.network.config.set_key('dynamic_fees', False)
+        w1.network.config.set_key('fee_per_kb', 5000)
+        w2.network.config.set_key('fee_per_kb', 1000)
+        async def pay():
+            await asyncio.wait_for(p1.initialized, 1)
+            await asyncio.wait_for(p2.initialized, 1)
+            await p1.close_channel(alice_channel.channel_id)
             gath.cancel()
         gath = asyncio.gather(pay(), p1._message_loop(), p2._message_loop())
         async def f():
