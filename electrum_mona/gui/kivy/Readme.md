@@ -104,7 +104,7 @@ Install Kivy.
 
 Build atlas: `(cd electrum_mona/gui/kivy/; make theming)`
 
-Run electrum with the `-g` switch: `electrum -g kivy`
+Run electrum with the `-g` switch: `run_electrum -g kivy`
 
 ### debug vs release build
 If you just follow the instructions above, you will build the apk
@@ -115,3 +115,13 @@ keystore, back it up safely, and run `./contrib/make_apk release`.
 
 See e.g. [kivy wiki](https://github.com/kivy/kivy/wiki/Creating-a-Release-APK)
 and [android dev docs](https://developer.android.com/studio/build/building-cmdline#sign_cmdline).
+
+### Access datadir on Android from desktop (e.g. to copy wallet file)
+Note that this only works for debug builds! Otherwise the security model
+of Android does not let you access the internal storage of an app without root.
+(See [this](https://stackoverflow.com/q/9017073))
+```
+$ adb shell
+$ run-as org.electrum_mona.electrum_mona ls /data/data/org.electrum_mona.electrum_mona/files/data
+$ run-as org.electrum_mona.electrum_mona cp /data/data/org.electrum_mona.electrum_mona/files/data/wallets/my_wallet /sdcard/some_path/my_wallet
+```

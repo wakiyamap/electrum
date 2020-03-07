@@ -104,17 +104,22 @@ pr_tooltips = {
     PR_FAILED:_('Failed'),
 }
 
+PR_DEFAULT_EXPIRATION_WHEN_CREATING = 24*60*60  # 1 day
 pr_expiration_values = {
     0: _('Never'),
     10*60: _('10 minutes'),
     60*60: _('1 hour'),
     24*60*60: _('1 day'),
-    7*24*60*60: _('1 week')
+    7*24*60*60: _('1 week'),
 }
+assert PR_DEFAULT_EXPIRATION_WHEN_CREATING in pr_expiration_values
+
 
 def get_request_status(req):
     status = req['status']
     exp = req.get('exp', 0) or 0
+    if req.get('type') == PR_TYPE_LN and exp == 0:
+        status = PR_EXPIRED  # for BOLT-11 invoices, exp==0 means 0 seconds
     if req['status'] == PR_UNPAID and exp > 0 and req['time'] + req['exp'] < time.time():
         status = PR_EXPIRED
     status_str = pr_tooltips[status]
@@ -906,11 +911,12 @@ def create_bip21_uri(addr, amount_sat: Optional[int], message: Optional[str],
 
 
 def maybe_extract_bolt11_invoice(data: str) -> Optional[str]:
-    lower = data.lower()
-    if lower.startswith('lightning:ln'):
-        lower = lower[10:]
-    if lower.startswith('ln'):
-        return lower
+    data = data.strip()  # whitespaces
+    data = data.lower()
+    if data.startswith('lightning:ln'):
+        data = data[10:]
+    if data.startswith('ln'):
+        return data
     return None
 
 
@@ -1099,14 +1105,14 @@ class NetworkJobOnDefaultServer(Logger):
         """Initialise fields. Called every time the underlying
         server connection changes.
         """
-        self.group = SilentTaskGroup()
+        self.taskgroup = SilentTaskGroup()
 
     async def _start(self, interface: 'Interface'):
         self.interface = interface
-        await interface.group.spawn(self._start_tasks)
+        await interface.taskgroup.spawn(self._start_tasks)
 
     async def _start_tasks(self):
-        """Start tasks in self.group. Called every time the underlying
+        """Start tasks in self.taskgroup. Called every time the underlying
         server connection changes.
         """
         raise NotImplementedError()  # implemented by subclasses
@@ -1116,7 +1122,7 @@ class NetworkJobOnDefaultServer(Logger):
         await self._stop()
 
     async def _stop(self):
-        await self.group.cancel_remaining()
+        await self.taskgroup.cancel_remaining()
 
     @log_exceptions
     async def _restart(self, *args):

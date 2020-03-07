@@ -136,6 +136,7 @@ class PaymentFailure(UserFacingException): pass
 # TODO make some of these values configurable?
 DEFAULT_TO_SELF_DELAY = 144
 
+REDEEM_AFTER_DOUBLE_SPENT_DELAY = 30
 
 ##### CLTV-expiry-delta-related values
 # see https://github.com/lightningnetwork/lightning-rfc/blob/master/02-peer-protocol.md#cltv_expiry_delta-selection
@@ -657,15 +658,17 @@ class LnGlobalFeatures(IntFlag):
 # note that these are powers of two, not the bits themselves
 LN_GLOBAL_FEATURES_KNOWN_SET = set(LnGlobalFeatures)
 
-def ln_compare_features(our_features, their_features):
-    """raises ValueError if incompatible"""
+class IncompatibleLightningFeatures(ValueError): pass
+
+def ln_compare_features(our_features, their_features) -> int:
+    """raises IncompatibleLightningFeatures if incompatible"""
     our_flags = set(list_enabled_bits(our_features))
     their_flags = set(list_enabled_bits(their_features))
     for flag in our_flags:
         if flag not in their_flags and get_ln_flag_pair_of_bit(flag) not in their_flags:
             # they don't have this feature we wanted :(
             if flag % 2 == 0:  # even flags are compulsory
-                raise ValueError(LnLocalFeatures(1 << flag))
+                raise IncompatibleLightningFeatures(f"remote does not support {LnLocalFeatures(1 << flag)!r}")
             our_features ^= 1 << flag  # disable flag
         else:
             # They too have this flag.
@@ -824,8 +827,10 @@ class ShortChannelID(bytes):
         if isinstance(data, ShortChannelID) or data is None:
             return data
         if isinstance(data, str):
+            assert len(data) == 16
             return ShortChannelID.fromhex(data)
-        if isinstance(data, bytes):
+        if isinstance(data, (bytes, bytearray)):
+            assert len(data) == 8
             return ShortChannelID(data)
 
     @property

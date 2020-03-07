@@ -24,7 +24,7 @@ from kivy.utils import platform
 from kivy.logger import Logger
 
 from electrum_mona.util import profiler, parse_URI, format_time, InvalidPassword, NotEnoughFunds, Fiat
-from electrum_mona.util import PR_TYPE_ONCHAIN, PR_TYPE_LN
+from electrum_mona.util import PR_TYPE_ONCHAIN, PR_TYPE_LN, PR_DEFAULT_EXPIRATION_WHEN_CREATING
 from electrum_mona import bitcoin, constants
 from electrum_mona.transaction import Transaction, tx_from_any, PartialTransaction, PartialTxOutput
 from electrum_mona.util import (parse_URI, InvalidBitcoinURI, PR_PAID, PR_UNKNOWN, PR_EXPIRED,
@@ -230,6 +230,7 @@ class SendScreen(CScreen):
             self.set_URI(self.payment_request_queued)
             self.payment_request_queued = None
         _list = self.app.wallet.get_invoices()
+        _list.reverse()
         lnworker_logs = self.app.wallet.lnworker.logs if self.app.wallet.lnworker else {}
         _list = [x for x in _list if x and x.get('status') != PR_PAID or x.get('rhash') in lnworker_logs]
         payments_container = self.screen.ids.payments_container
@@ -420,7 +421,7 @@ class ReceiveScreen(CScreen):
         Clock.schedule_interval(lambda dt: self.update(), 5)
 
     def expiry(self):
-        return self.app.electrum_config.get('request_expiry', 3600) # 1 hour
+        return self.app.electrum_config.get('request_expiry', PR_DEFAULT_EXPIRATION_WHEN_CREATING)
 
     def clear(self):
         self.screen.address = ''
@@ -483,7 +484,7 @@ class ReceiveScreen(CScreen):
             key = req['rhash']
             address = req['invoice']
         amount = req.get('amount')
-        description = req.get('memo', '')
+        description = req.get('message') or req.get('memo', '')  # TODO: a db upgrade would be needed to simplify that.
         status, status_str = get_request_status(req)
         ci = {}
         ci['screen'] = self
@@ -500,6 +501,7 @@ class ReceiveScreen(CScreen):
         if not self.loaded:
             return
         _list = self.app.wallet.get_sorted_requests()
+        _list.reverse()
         requests_container = self.screen.ids.requests_container
         requests_container.data = [self.get_card(item) for item in _list if item.get('status') != PR_PAID]
 

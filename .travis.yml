@@ -30,8 +30,8 @@ jobs:
         - sudo apt-get -qq update
         - sudo apt-get install -yq monacoind
         - sudo apt-get -y install libsecp256k1-0
-        - pip install -r contrib/requirements/requirements.txt
-        - pip install git+https://github.com/kyuupichan/electrumx.git
+        - pip install .[tests]
+        - pip install electrumx
       before_script:
           - electrum_mona/tests/regtest/start_bitcoind.sh
           - electrum_mona/tests/regtest/start_electrumx.sh

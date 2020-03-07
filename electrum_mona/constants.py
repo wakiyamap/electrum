@@ -128,7 +128,7 @@ class BitcoinTestnet(AbstractNet):
     LN_REALM_BYTE = 1
     LN_DNS_SEEDS = [
         'testlnd.nodes.directory.',
-]
+    ]
 
 
 class BitcoinRegtest(BitcoinTestnet):
