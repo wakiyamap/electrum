@@ -1,13 +1,20 @@
 import asyncio
 import binascii
+from typing import TYPE_CHECKING
+
 from kivy.lang import Builder
 from kivy.factory import Factory
 from kivy.uix.popup import Popup
 from kivy.clock import Clock
+
 from electrum_mona.util import bh2u
 from electrum_mona.lnutil import LOCAL, REMOTE, format_short_channel_id
 from electrum_mona.gui.kivy.i18n import _
 from .question import Question
+
+if TYPE_CHECKING:
+    from ...main_window import ElectrumWindow
+
 
 Builder.load_string(r'''
 <LightningChannelItem@CardItem>
@@ -208,7 +215,7 @@ class ChannelDetailsPopup(Popup):
         self.funding_txid = chan.funding_outpoint.txid
         self.short_id = format_short_channel_id(chan.short_channel_id)
         self.capacity = self.app.format_amount_and_units(chan.constraints.capacity)
-        self.state = self.app.wallet.lnworker.get_channel_status(chan)
+        self.state = chan.get_state_for_GUI()
         self.local_ctn = chan.get_latest_ctn(LOCAL)
         self.remote_ctn = chan.get_latest_ctn(REMOTE)
         self.local_csv = chan.config[LOCAL].to_self_delay
@@ -267,7 +274,7 @@ class ChannelDetailsPopup(Popup):
 
 class LightningChannelsDialog(Factory.Popup):
 
-    def __init__(self, app):
+    def __init__(self, app: 'ElectrumWindow'):
         super(LightningChannelsDialog, self).__init__()
         self.clocks = []
         self.app = app
@@ -297,7 +304,7 @@ class LightningChannelsDialog(Factory.Popup):
 
     def update_item(self, item):
         chan = item._chan
-        item.status = self.app.wallet.lnworker.get_channel_status(chan)
+        item.status = chan.get_state_for_GUI()
         item.short_channel_id = format_short_channel_id(chan.short_channel_id)
         l, r = self.format_fields(chan)
         item.local_balance = _('Local') + ':' + l
@@ -321,5 +328,5 @@ class LightningChannelsDialog(Factory.Popup):
 
     def update_can_send(self):
         lnworker = self.app.wallet.lnworker
-        self.can_send = self.app.format_amount_and_units(lnworker.can_send())
-        self.can_receive = self.app.format_amount_and_units(lnworker.can_receive())
+        self.can_send = self.app.format_amount_and_units(lnworker.num_sats_can_send())
+        self.can_receive = self.app.format_amount_and_units(lnworker.num_sats_can_receive())

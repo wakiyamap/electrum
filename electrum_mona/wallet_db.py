@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 
 OLD_SEED_VERSION = 4        # electrum versions < 2.0
 NEW_SEED_VERSION = 11       # electrum versions >= 2.0
-FINAL_SEED_VERSION = 26     # electrum >= 2.7 will set this to prevent
+FINAL_SEED_VERSION = 27     # electrum >= 2.7 will set this to prevent
                             # old versions from overwriting new format
 
 
@@ -172,6 +172,7 @@ class WalletDB(JsonDB):
         self._convert_version_24()
         self._convert_version_25()
         self._convert_version_26()
+        self._convert_version_27()
         self.put('seed_version', FINAL_SEED_VERSION)  # just to be sure
 
         self._after_upgrade_tasks()
@@ -586,6 +587,14 @@ class WalletDB(JsonDB):
                 if closing_txid:
                     c['closing_height'] = closing_txid, closing_height, closing_timestamp
         self.data['seed_version'] = 26
+
+    def _convert_version_27(self):
+        if not self._is_upgrade_method_needed(26, 26):
+            return
+        channels = self.data.get('channels', {})
+        for channel_id, c in channels.items():
+            c['local_config']['htlc_minimum_msat'] = 1
+        self.data['seed_version'] = 27
 
     def _convert_imported(self):
         if not self._is_upgrade_method_needed(0, 13):
@@ -1079,7 +1088,7 @@ class WalletDB(JsonDB):
             # note: for performance, "deserialize=False" so that we will deserialize these on-demand
             v = dict((k, tx_from_any(x, deserialize=False)) for k, x in v.items())
         elif key == 'adds':
-            v = dict((k, UpdateAddHtlc(*x)) for k, x in v.items())
+            v = dict((k, UpdateAddHtlc.from_tuple(*x)) for k, x in v.items())
         elif key == 'fee_updates':
             v = dict((k, FeeUpdate(**x)) for k, x in v.items())
         elif key == 'tx_fees':
@@ -1101,18 +1110,6 @@ class WalletDB(JsonDB):
             v = ChannelConstraints(**v)
         elif key == 'funding_outpoint':
             v = Outpoint(**v)
-        elif key.endswith("_basepoint") or key.endswith("_key"):
-            v = Keypair(**v) if len(v)==2 else OnlyPubkeyKeypair(**v)
-        elif key in [
-                "short_channel_id",
-                "current_per_commitment_point",
-                "next_per_commitment_point",
-                "per_commitment_secret_seed",
-                "current_commitment_signature",
-                "current_htlc_signatures"]:
-            v = binascii.unhexlify(v) if v is not None else None
-        elif len(path) > 2 and path[-2] in ['local_config', 'remote_config'] and key in ["pubkey", "privkey"]:
-            v = binascii.unhexlify(v) if v is not None else None
         return v
 
     def write(self, storage: 'WalletStorage'):

@@ -29,7 +29,7 @@ from typing import Sequence
 from PyQt5.QtCore import Qt, QItemSelectionModel
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
 from PyQt5.QtWidgets import QAbstractItemView
-from PyQt5.QtWidgets import QMenu, QVBoxLayout, QTreeWidget, QTreeWidgetItem
+from PyQt5.QtWidgets import QMenu, QVBoxLayout, QTreeWidget, QTreeWidgetItem, QHeaderView
 
 from electrum_mona.i18n import _
 from electrum_mona.util import format_time, PR_UNPAID, PR_PAID, PR_INFLIGHT, PR_FAILED
@@ -142,11 +142,11 @@ class InvoiceList(MyTreeView):
         if len(items)>1:
             keys = [ item.data(ROLE_REQUEST_ID)  for item in items]
             invoices = [ self.parent.wallet.get_invoice(key) for key in keys]
-            invoices = [ invoice for invoice in invoices if invoice['status'] == PR_UNPAID and invoice['type'] == PR_TYPE_ONCHAIN]
+            can_batch_pay = all([ invoice['status'] == PR_UNPAID and invoice['type'] == PR_TYPE_ONCHAIN for invoice in invoices])
             menu = QMenu(self)
-            if len(invoices) > 1:
-                menu.addAction(_("Pay multiple invoices"), lambda: self.parent.pay_multiple_invoices(invoices))
-            menu.addAction(_("Delete"), lambda: self.parent.delete_invoices(keys))
+            if can_batch_pay:
+                menu.addAction(_("Batch pay invoices"), lambda: self.parent.pay_multiple_invoices(invoices))
+            menu.addAction(_("Delete invoices"), lambda: self.parent.delete_invoices(keys))
             menu.exec_(self.viewport().mapToGlobal(position))
             return
         idx = self.indexAt(position)
@@ -168,37 +168,20 @@ class InvoiceList(MyTreeView):
             log = self.parent.wallet.lnworker.logs.get(key)
             if log:
                 menu.addAction(_("View log"), lambda: self.show_log(key, log))
-        menu.addAction(_("Delete invoices"), lambda: self.parent.delete_invoices([key]))
+        menu.addAction(_("Delete"), lambda: self.parent.delete_invoices([key]))
         menu.exec_(self.viewport().mapToGlobal(position))
 
     def show_log(self, key, log: Sequence[PaymentAttemptLog]):
         d = WindowModalDialog(self, _("Payment log"))
-        d.setMinimumWidth(800)
+        d.setMinimumWidth(600)
         vbox = QVBoxLayout(d)
         log_w = QTreeWidget()
-        log_w.setHeaderLabels([_('Route'), _('Channel ID'), _('Message'), _('Blacklist')])
+        log_w.setHeaderLabels([_('Hops'), _('Channel ID'), _('Message')])
+        log_w.header().setSectionResizeMode(2, QHeaderView.Stretch)
+        log_w.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         for payment_attempt_log in log:
-            if not payment_attempt_log.exception:
-                route = payment_attempt_log.route
-                route_str = '%d'%len(route)
-                if not payment_attempt_log.success:
-                    sender_idx = payment_attempt_log.failure_details.sender_idx
-                    failure_msg = payment_attempt_log.failure_details.failure_msg
-                    blacklist_msg = str(payment_attempt_log.failure_details.is_blacklisted)
-                    short_channel_id = route[sender_idx+1].short_channel_id
-                    data = failure_msg.data
-                    message = repr(failure_msg.code)
-                else:
-                    short_channel_id = route[-1].short_channel_id
-                    message = _('Success')
-                    blacklist_msg = str(False)
-                chan_str = str(short_channel_id)
-            else:
-                route_str = 'None'
-                chan_str = 'N/A'
-                message = str(payment_attempt_log.exception)
-                blacklist_msg = 'N/A'
-            x = QTreeWidgetItem([route_str, chan_str, message, blacklist_msg])
+            route_str, chan_str, message = payment_attempt_log.formatted_tuple()
+            x = QTreeWidgetItem([route_str, chan_str, message])
             log_w.addTopLevelItem(x)
         vbox.addWidget(log_w)
         vbox.addLayout(Buttons(CloseButton(d)))

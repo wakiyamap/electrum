@@ -55,6 +55,7 @@ class MockNetwork:
         self.config = simple_config.SimpleConfig(user_config, read_user_dir_function=lambda: user_dir)
         self.asyncio_loop = asyncio.get_event_loop()
         self.channel_db = ChannelDB(self)
+        self.channel_db.data_loaded.set()
         self.path_finder = LNPathFinder(self.channel_db)
         self.tx_queue = tx_queue
 
@@ -126,9 +127,11 @@ class MockLNWallet(Logger):
     def save_channel(self, chan):
         print("Ignoring channel save")
 
+    is_routing = set()
     preimages = {}
     get_payment_info = LNWallet.get_payment_info
     save_payment_info = LNWallet.save_payment_info
+    set_invoice_status = LNWallet.set_invoice_status
     set_payment_status = LNWallet.set_payment_status
     get_payment_status = LNWallet.get_payment_status
     await_payment = LNWallet.await_payment
@@ -350,7 +353,7 @@ class TestPeer(ElectrumTestCase):
             await asyncio.wait_for(p1.initialized, 1)
             await asyncio.wait_for(p2.initialized, 1)
             # alice sends htlc
-            route = await w1._create_route_from_invoice(decoded_invoice=lnaddr)
+            route = w1._create_route_from_invoice(decoded_invoice=lnaddr)
             htlc = p1.pay(route, alice_channel, int(lnaddr.amount * COIN * 1000), lnaddr.paymenthash, lnaddr.get_min_final_cltv_expiry())
             # alice closes
             await p1.close_channel(alice_channel.channel_id)
@@ -370,14 +373,14 @@ class TestPeer(ElectrumTestCase):
         pay_req = self.prepare_invoice(w2)
 
         addr = w1._check_invoice(pay_req)
-        route = run(w1._create_route_from_invoice(decoded_invoice=addr))
+        route = w1._create_route_from_invoice(decoded_invoice=addr)
 
         run(w1.force_close_channel(alice_channel.channel_id))
         # check if a tx (commitment transaction) was broadcasted:
         assert q1.qsize() == 1
 
         with self.assertRaises(NoPathFound) as e:
-            run(w1._create_route_from_invoice(decoded_invoice=addr))
+            w1._create_route_from_invoice(decoded_invoice=addr)
 
         peer = w1.peers[route[0].node_id]
         # AssertionError is ok since we shouldn't use old routes, and the
