@@ -858,7 +858,6 @@ class TestWalletSending(TestCaseForTestnet):
 
     @mock.patch.object(wallet.Abstract_Wallet, 'save_db')
     def test_rbf(self, mock_save_db):
-        self.maxDiff = None
         for simulate_moving_txs in (False, True):
             with self.subTest(msg="_bump_fee_p2pkh_when_there_is_a_change_address", simulate_moving_txs=simulate_moving_txs):
                 self._bump_fee_p2pkh_when_there_is_a_change_address(simulate_moving_txs=simulate_moving_txs)

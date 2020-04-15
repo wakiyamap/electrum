@@ -26,7 +26,7 @@
 
 from typing import TYPE_CHECKING, Dict, List, Union, Tuple, Sequence, Optional, Type
 
-from electrum_mona.plugin import BasePlugin, hook, Device, DeviceMgr
+from electrum_mona.plugin import BasePlugin, hook, Device, DeviceMgr, DeviceInfo
 from electrum_mona.i18n import _
 from electrum_mona.bitcoin import is_address, opcodes
 from electrum_mona.util import bfh, versiontuple, UserFacingException
@@ -36,7 +36,9 @@ from electrum_mona.storage import get_derivation_used_for_hw_device_encryption
 from electrum_mona.keystore import Xpub, Hardware_KeyStore
 
 if TYPE_CHECKING:
+    import threading
     from electrum_mona.wallet import Abstract_Wallet
+    from electrum_mona.base_wizard import BaseWizard
 
 
 class HW_PluginBase(BasePlugin):
@@ -63,15 +65,33 @@ class HW_PluginBase(BasePlugin):
             if isinstance(keystore, self.keystore_class):
                 self.device_manager().unpair_xpub(keystore.xpub)
 
-    def setup_device(self, device_info, wizard, purpose):
+    def scan_and_create_client_for_device(self, *, device_id: str, wizard: 'BaseWizard') -> 'HardwareClientBase':
+        devmgr = self.device_manager()
+        client = devmgr.client_by_id(device_id)
+        if client is None:
+            raise UserFacingException(_('Failed to create a client for this device.') + '\n' +
+                                      _('Make sure it is in the correct state.'))
+        client.handler = self.create_handler(wizard)
+        return client
+
+    def setup_device(self, device_info: DeviceInfo, wizard: 'BaseWizard', purpose):
         """Called when creating a new wallet or when using the device to decrypt
         an existing wallet. Select the device to use.  If the device is
         uninitialized, go through the initialization process.
+
+        Runs in GUI thread.
         """
         raise NotImplementedError()
 
-    def get_client(self, keystore: 'Hardware_KeyStore', force_pair: bool = True) -> Optional['HardwareClientBase']:
-        raise NotImplementedError()
+    def get_client(self, keystore: 'Hardware_KeyStore', force_pair: bool = True, *,
+                   devices: Sequence['Device'] = None,
+                   allow_user_interaction: bool = True) -> Optional['HardwareClientBase']:
+        devmgr = self.device_manager()
+        handler = keystore.handler
+        client = devmgr.client_for_keystore(self, handler, keystore, force_pair,
+                                            devices=devices,
+                                            allow_user_interaction=allow_user_interaction)
+        return client
 
     def show_address(self, wallet: 'Abstract_Wallet', address, keystore: 'Hardware_KeyStore' = None):
         pass  # implemented in child classes
@@ -139,14 +159,22 @@ class HW_PluginBase(BasePlugin):
     def is_outdated_fw_ignored(self) -> bool:
         return self._ignore_outdated_fw
 
-    def create_client(self, device: 'Device', handler) -> Optional['HardwareClientBase']:
+    def create_client(self, device: 'Device',
+                      handler: Optional['HardwareHandlerBase']) -> Optional['HardwareClientBase']:
         raise NotImplementedError()
 
-    def get_xpub(self, device_id, derivation: str, xtype, wizard) -> str:
+    def get_xpub(self, device_id, derivation: str, xtype, wizard: 'BaseWizard') -> str:
+        raise NotImplementedError()
+
+    def create_handler(self, window) -> 'HardwareHandlerBase':
+        # note: in Qt GUI, 'window' is either an ElectrumWindow or an InstallWizard
         raise NotImplementedError()
 
 
 class HardwareClientBase:
+
+    plugin: 'HW_PluginBase'
+    handler = None  # type: Optional['HardwareHandlerBase']
 
     def is_pairable(self) -> bool:
         raise NotImplementedError()
@@ -168,7 +196,19 @@ class HardwareClientBase:
         and they are also used as a fallback to distinguish devices programmatically.
         So ideally, different devices would have different labels.
         """
-        raise NotImplementedError()
+        # When returning a constant here (i.e. not implementing the method in the way
+        # it is supposed to work), make sure the return value is in electrum.plugin.PLACEHOLDER_HW_CLIENT_LABELS
+        return " "
+
+    def get_soft_device_id(self) -> Optional[str]:
+        """An id-like string that is used to distinguish devices programmatically.
+        This is a long term id for the device, that does not change between reconnects.
+        This method should not prompt the user, i.e. no user interaction, as it is used
+        during USB device enumeration (called for each unpaired device).
+        Stored in the wallet file.
+        """
+        # This functionality is optional. If not implemented just return None:
+        return None
 
     def has_usable_connection_with_device(self) -> bool:
         raise NotImplementedError()
@@ -189,6 +229,55 @@ class HardwareClientBase:
         xpub = self.get_xpub(derivation, "standard")
         password = Xpub.get_pubkey_from_xpub(xpub, ()).hex()
         return password
+
+    def device_model_name(self) -> Optional[str]:
+        """Return the name of the model of this device, which might be displayed in the UI.
+        E.g. for Trezor, "Trezor One" or "Trezor T".
+        """
+        return None
+
+
+class HardwareHandlerBase:
+    """An interface between the GUI and the device handling logic for handling I/O."""
+    win = None
+    device: str
+
+    def get_wallet(self) -> Optional['Abstract_Wallet']:
+        if self.win is not None:
+            if hasattr(self.win, 'wallet'):
+                return self.win.wallet
+
+    def get_gui_thread(self) -> Optional['threading.Thread']:
+        if self.win is not None:
+            if hasattr(self.win, 'gui_thread'):
+                return self.win.gui_thread
+
+    def update_status(self, paired: bool) -> None:
+        pass
+
+    def query_choice(self, msg: str, labels: Sequence[str]) -> Optional[int]:
+        raise NotImplementedError()
+
+    def yes_no_question(self, msg: str) -> bool:
+        raise NotImplementedError()
+
+    def show_message(self, msg: str, on_cancel=None) -> None:
+        raise NotImplementedError()
+
+    def show_error(self, msg: str, blocking: bool = False) -> None:
+        raise NotImplementedError()
+
+    def finished(self) -> None:
+        pass
+
+    def get_word(self, msg: str) -> str:
+        raise NotImplementedError()
+
+    def get_passphrase(self, msg: str, confirm: bool) -> Optional[str]:
+        raise NotImplementedError()
+
+    def get_pin(self, msg: str, *, show_strength: bool = True) -> str:
+        raise NotImplementedError()
 
 
 def is_any_tx_output_on_change_branch(tx: PartialTransaction) -> bool:

@@ -78,10 +78,11 @@ setup(
         'electrum_mona': 'electrum_mona'
     },
     package_data={
-        '': ['*.txt', '*.json', '*.ttf', '*.otf'],
+        '': ['*.txt', '*.json', '*.ttf', '*.otf', '*.csv'],
         'electrum_mona': [
             'wordlist/*.txt',
             'locale/*/LC_MESSAGES/electrum.mo',
+            'lnwire/*.csv',
         ],
         'electrum_mona.gui': [
             'icons/*',

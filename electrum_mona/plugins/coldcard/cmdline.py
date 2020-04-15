@@ -2,18 +2,20 @@ from electrum_mona.plugin import hook
 from electrum_mona.util import print_msg, raw_input, print_stderr
 from electrum_mona.logging import get_logger
 
+from ..hw_wallet.cmdline import CmdLineHandler
+
 from .coldcard import ColdcardPlugin
 
 
 _logger = get_logger(__name__)
 
 
-class ColdcardCmdLineHandler:
+class ColdcardCmdLineHandler(CmdLineHandler):
 
     def get_passphrase(self, msg, confirm):
         raise NotImplementedError
 
-    def get_pin(self, msg):
+    def get_pin(self, msg, *, show_strength=True):
         raise NotImplementedError
 
     def prompt_auth(self, msg):
