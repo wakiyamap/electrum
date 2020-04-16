@@ -277,8 +277,8 @@ if [[ $1 == "breach_with_spent_htlc" ]]; then
     $alice load_wallet -w /tmp/alice/regtest/wallets/toxic_wallet
     # wait until alice has spent both ctx outputs
     echo "alice spends to_local and htlc outputs"
-    wait_until_spent $ctx_id 0
-    wait_until_spent $ctx_id 1
+    #wait_until_spent $ctx_id 0
+    #wait_until_spent $ctx_id 1
     new_blocks 1
     echo "bob comes back"
     $bob daemon -d
