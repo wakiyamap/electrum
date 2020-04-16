@@ -44,7 +44,7 @@ requirements =
     kivy==39c17457bae91baf8fe710dc989791e45879f136,
     libffi,
     libsecp256k1,
-    cryptography
+    cryptography,
     lyra2re2_hash
 
 # (str) Presplash of the application
