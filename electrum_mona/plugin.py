@@ -360,9 +360,8 @@ class DeviceMgr(ThreadJob):
         # A list of clients.  The key is the client, the value is
         # a (path, id_) pair. Needs self.lock.
         self.clients = {}  # type: Dict[HardwareClientBase, Tuple[Union[str, bytes], str]]
-        # What we recognise.  Each entry is a (vendor_id, product_id)
-        # pair.
-        self.recognised_hardware = set()
+        # What we recognise.  (vendor_id, product_id) -> Plugin
+        self._recognised_hardware = {}  # type: Dict[Tuple[int, int], HW_PluginBase]
         # Custom enumerate functions for devices we don't know about.
         self._enumerate_func = set()  # Needs self.lock.
         # locks: if you need to take multiple ones, acquire them in the order they are defined here!
@@ -390,9 +389,9 @@ class DeviceMgr(ThreadJob):
         for client in clients:
             client.timeout(cutoff)
 
-    def register_devices(self, device_pairs):
+    def register_devices(self, device_pairs, *, plugin: 'HW_PluginBase'):
         for pair in device_pairs:
-            self.recognised_hardware.add(pair)
+            self._recognised_hardware[pair] = plugin
 
     def register_enumerate_func(self, func):
         with self.lock:
@@ -401,7 +400,7 @@ class DeviceMgr(ThreadJob):
     def create_client(self, device: 'Device', handler: Optional['HardwareHandlerBase'],
                       plugin: 'HW_PluginBase') -> Optional['HardwareClientBase']:
         # Get from cache first
-        client = self.client_lookup(device.id_)
+        client = self._client_by_id(device.id_)
         if client:
             return client
         client = plugin.create_client(device, handler)
@@ -437,7 +436,7 @@ class DeviceMgr(ThreadJob):
             self._close_client(id_)
 
     def _close_client(self, id_):
-        client = self.client_lookup(id_)
+        client = self._client_by_id(id_)
         self.clients.pop(client, None)
         if client:
             client.close()
@@ -446,19 +445,20 @@ class DeviceMgr(ThreadJob):
         with self.lock:
             self.xpub_ids[xpub] = id_
 
-    def client_lookup(self, id_) -> Optional['HardwareClientBase']:
+    def _client_by_id(self, id_) -> Optional['HardwareClientBase']:
         with self.lock:
             for client, (path, client_id) in self.clients.items():
                 if client_id == id_:
                     return client
         return None
 
-    def client_by_id(self, id_) -> Optional['HardwareClientBase']:
+    def client_by_id(self, id_, *, scan_now: bool = True) -> Optional['HardwareClientBase']:
         '''Returns a client for the device ID if one is registered.  If
         a device is wiped or in bootloader mode pairing is impossible;
         in such cases we communicate by device ID and not wallet.'''
-        self.scan_devices()
-        return self.client_lookup(id_)
+        if scan_now:
+            self.scan_devices()
+        return self._client_by_id(id_)
 
     @with_scan_lock
     def client_for_keystore(self, plugin: 'HW_PluginBase', handler: Optional['HardwareHandlerBase'],
@@ -495,7 +495,7 @@ class DeviceMgr(ThreadJob):
     def client_by_xpub(self, plugin: 'HW_PluginBase', xpub, handler: 'HardwareHandlerBase',
                        devices: Sequence['Device']) -> Optional['HardwareClientBase']:
         _id = self.xpub_id(xpub)
-        client = self.client_lookup(_id)
+        client = self._client_by_id(_id)
         if client:
             # An unpaired client might have another wallet's handler
             # from a prior scan.  Replace to fix dialog parenting.
@@ -511,7 +511,7 @@ class DeviceMgr(ThreadJob):
         # The wallet has not been previously paired, so let the user
         # choose an unpaired device and compare its first address.
         xtype = bip32.xpub_type(xpub)
-        client = self.client_lookup(info.device.id_)
+        client = self._client_by_id(info.device.id_)
         if client and client.is_pairable():
             # See comment above for same code
             client.handler = handler
@@ -641,20 +641,10 @@ class DeviceMgr(ThreadJob):
         devices = []
         for d in hid_list:
             product_key = (d['vendor_id'], d['product_id'])
-            if product_key in self.recognised_hardware:
-                # Older versions of hid don't provide interface_number
-                interface_number = d.get('interface_number', -1)
-                usage_page = d['usage_page']
-                id_ = d['serial_number']
-                if len(id_) == 0:
-                    id_ = str(d['path'])
-                id_ += str(interface_number) + str(usage_page)
-                devices.append(Device(path=d['path'],
-                                      interface_number=interface_number,
-                                      id_=id_,
-                                      product_key=product_key,
-                                      usage_page=usage_page,
-                                      transport_ui_string='hid'))
+            if product_key in self._recognised_hardware:
+                plugin = self._recognised_hardware[product_key]
+                device = plugin.create_device_from_hid_enumeration(d, product_key=product_key)
+                devices.append(device)
         return devices
 
     @with_scan_lock

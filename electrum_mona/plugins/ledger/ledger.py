@@ -580,7 +580,7 @@ class LedgerPlugin(HW_PluginBase):
         self.segwit = config.get("segwit")
         HW_PluginBase.__init__(self, parent, config, name)
         if self.libraries_available:
-            self.device_manager().register_devices(self.DEVICE_IDS)
+            self.device_manager().register_devices(self.DEVICE_IDS, plugin=self)
 
     def get_btchip_device(self, device):
         ledger = False
@@ -612,6 +612,7 @@ class LedgerPlugin(HW_PluginBase):
         client = self.scan_and_create_client_for_device(device_id=device_id, wizard=wizard)
         wizard.run_task_without_blocking_gui(
             task=lambda: client.get_xpub("m/44'/22'", 'standard'))  # TODO replace by direct derivation once Nano S > 1.1
+        return client
 
     def get_xpub(self, device_id, derivation, xtype, wizard):
         if xtype not in self.SUPPORTED_XTYPES:

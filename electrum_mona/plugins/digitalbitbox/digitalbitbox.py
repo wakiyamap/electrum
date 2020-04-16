@@ -675,7 +675,7 @@ class DigitalBitboxPlugin(HW_PluginBase):
     def __init__(self, parent, config, name):
         HW_PluginBase.__init__(self, parent, config, name)
         if self.libraries_available:
-            self.device_manager().register_devices(self.DEVICE_IDS)
+            self.device_manager().register_devices(self.DEVICE_IDS, plugin=self)
 
         self.digitalbitbox_config = self.config.get('digitalbitbox', {})
 
@@ -705,6 +705,7 @@ class DigitalBitboxPlugin(HW_PluginBase):
             client.setupRunning = True
         wizard.run_task_without_blocking_gui(
             task=lambda: client.get_xpub("m/44'/22'", 'standard'))
+        return client
 
 
     def is_mobile_paired(self):

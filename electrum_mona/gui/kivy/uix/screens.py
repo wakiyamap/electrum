@@ -33,7 +33,7 @@ from electrum_mona.util import (parse_URI, InvalidBitcoinURI, PR_PAID, PR_UNKNOW
 from electrum_mona.plugin import run_hook
 from electrum_mona.wallet import InternalAddressCorruption
 from electrum_mona import simple_config
-from electrum_mona.lnaddr import lndecode
+from electrum_mona.lnaddr import lndecode, parse_lightning_invoice
 from electrum_mona.lnutil import RECEIVED, SENT, PaymentFailure
 
 from .dialogs.question import Question
@@ -299,7 +299,7 @@ class SendScreen(CScreen):
             return
         message = self.message
         if self.is_lightning:
-            return self.app.wallet.lnworker.parse_bech32_invoice(address)
+            return parse_lightning_invoice(address)
         else:  # on-chain
             if self.payment_request:
                 outputs = self.payment_request.get_outputs()
@@ -405,7 +405,7 @@ class SendScreen(CScreen):
                     self.app.wallet.delete_invoice(key)
                 self.update()
         n = len(invoices)
-        d = Question(_(f'Delete {n} invoices?'), callback)
+        d = Question(_('Delete {} invoices?').format(n), callback)
         d.open()
 
 
@@ -523,7 +523,7 @@ class ReceiveScreen(CScreen):
                     self.app.wallet.delete_request(key)
                 self.update()
         n = len(requests)
-        d = Question(_(f'Delete {n} requests?'), callback)
+        d = Question(_('Delete {} requests?').format(n), callback)
         d.open()
 
 

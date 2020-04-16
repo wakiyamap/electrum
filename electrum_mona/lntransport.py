@@ -89,6 +89,7 @@ def create_ephemeral_key() -> (bytes, bytes):
 class LNTransportBase:
     reader: StreamReader
     writer: StreamWriter
+    privkey: bytes
 
     def name(self) -> str:
         raise NotImplementedError()
@@ -154,6 +155,8 @@ class LNTransportBase:
 
 
 class LNResponderTransport(LNTransportBase):
+    """Transport initiated by remote party."""
+
     def __init__(self, privkey: bytes, reader: StreamReader, writer: StreamWriter):
         LNTransportBase.__init__(self)
         self.reader = reader
@@ -210,7 +213,9 @@ class LNResponderTransport(LNTransportBase):
         self.init_counters(ck)
         return rs
 
+
 class LNTransport(LNTransportBase):
+    """Transport initiated by local party."""
 
     def __init__(self, privkey: bytes, peer_addr: LNPeerAddr):
         LNTransportBase.__init__(self)

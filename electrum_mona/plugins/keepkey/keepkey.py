@@ -88,7 +88,7 @@ class KeepKeyPlugin(HW_PluginBase):
             self.DEVICE_IDS = (keepkeylib.transport_hid.DEVICE_IDS +
                                keepkeylib.transport_webusb.DEVICE_IDS)
             # only "register" hid device id:
-            self.device_manager().register_devices(keepkeylib.transport_hid.DEVICE_IDS)
+            self.device_manager().register_devices(keepkeylib.transport_hid.DEVICE_IDS, plugin=self)
             # for webusb transport, use custom enumerate function:
             self.device_manager().register_enumerate_func(self.enumerate)
             self.libraries_available = True
@@ -283,6 +283,7 @@ class KeepKeyPlugin(HW_PluginBase):
         wizard.run_task_without_blocking_gui(
             task=lambda: client.get_xpub("m", 'standard'))
         client.used()
+        return client
 
     def get_xpub(self, device_id, derivation, xtype, wizard):
         if xtype not in self.SUPPORTED_XTYPES:
