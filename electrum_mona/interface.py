@@ -43,7 +43,7 @@ from aiorpcx.jsonrpc import JSONRPC, CodeMessageError
 from aiorpcx.rawsocket import RSClient
 import certifi
 
-from .util import ignore_exceptions, log_exceptions, bfh, SilentTaskGroup
+from .util import ignore_exceptions, log_exceptions, bfh, SilentTaskGroup, MySocksProxy
 from . import util
 from . import x509
 from . import pem
@@ -64,6 +64,10 @@ ca_path = certifi.where()
 BUCKET_NAME_OF_ONION_SERVERS = 'onion'
 
 MAX_INCOMING_MSG_SIZE = 1_000_000  # in bytes
+
+_KNOWN_NETWORK_PROTOCOLS = {'t', 's'}
+PREFERRED_NETWORK_PROTOCOL = 's'
+assert PREFERRED_NETWORK_PROTOCOL in _KNOWN_NETWORK_PROTOCOLS
 
 
 class NetworkTimeout:
@@ -212,7 +216,7 @@ class ServerAddr:
             net_addr = NetAddress(host, port)  # this validates host and port
         except Exception as e:
             raise ValueError(f"cannot construct ServerAddr: invalid host or port (host={host}, port={port})") from e
-        if protocol not in ('s', 't'):
+        if protocol not in _KNOWN_NETWORK_PROTOCOLS:
             raise ValueError(f"invalid network protocol: {protocol}")
         self.host = str(net_addr.host)  # canonical form (if e.g. IPv6 address)
         self.port = int(net_addr.port)
@@ -223,6 +227,24 @@ class ServerAddr:
     def from_str(cls, s: str) -> 'ServerAddr':
         # host might be IPv6 address, hence do rsplit:
         host, port, protocol = str(s).rsplit(':', 2)
+        return ServerAddr(host=host, port=port, protocol=protocol)
+
+    @classmethod
+    def from_str_with_inference(cls, s: str) -> Optional['ServerAddr']:
+        """Construct ServerAddr from str, guessing missing details.
+        Ongoing compatibility not guaranteed.
+        """
+        if not s:
+            return None
+        items = str(s).rsplit(':', 2)
+        if len(items) < 2:
+            return None  # although maybe we could guess the port too?
+        host = items[0]
+        port = items[1]
+        if len(items) >= 3:
+            protocol = items[2]
+        else:
+            protocol = PREFERRED_NETWORK_PROTOCOL
         return ServerAddr(host=host, port=port, protocol=protocol)
 
     def __str__(self):
@@ -277,7 +299,7 @@ class Interface(Logger):
         self.blockchain = None  # type: Optional[Blockchain]
         self._requested_chunks = set()  # type: Set[int]
         self.network = network
-        self._set_proxy(proxy)
+        self.proxy = MySocksProxy.from_proxy_dict(proxy)
         self.session = None  # type: Optional[NotificationSession]
         self._ipaddr_bucket = None
 
@@ -309,23 +331,6 @@ class Interface(Logger):
 
     def __str__(self):
         return f"<Interface {self.diagnostic_name()}>"
-
-    def _set_proxy(self, proxy: dict):
-        if proxy:
-            username, pw = proxy.get('user'), proxy.get('password')
-            if not username or not pw:
-                auth = None
-            else:
-                auth = aiorpcx.socks.SOCKSUserAuth(username, pw)
-            addr = NetAddress(proxy['host'], proxy['port'])
-            if proxy['mode'] == "socks4":
-                self.proxy = aiorpcx.socks.SOCKSProxy(addr, aiorpcx.socks.SOCKS4a, auth)
-            elif proxy['mode'] == "socks5":
-                self.proxy = aiorpcx.socks.SOCKSProxy(addr, aiorpcx.socks.SOCKS5, auth)
-            else:
-                raise NotImplementedError  # http proxy not available with aiorpcx
-        else:
-            self.proxy = None
 
     async def is_server_ca_signed(self, ca_ssl_context):
         """Given a CA enforcing SSL context, returns True if the connection
@@ -480,13 +485,12 @@ class Interface(Logger):
 
     async def get_certificate(self):
         sslc = ssl.SSLContext()
-        try:
-            async with _RSClient(session_factory=RPCSession,
-                                 host=self.host, port=self.port,
-                                 ssl=sslc, proxy=self.proxy) as session:
-                return session.transport._asyncio_transport._ssl_protocol._sslpipe._sslobj.getpeercert(True)
-        except ValueError:
-            return None
+        async with _RSClient(session_factory=RPCSession,
+                             host=self.host, port=self.port,
+                             ssl=sslc, proxy=self.proxy) as session:
+            asyncio_transport = session.transport._asyncio_transport  # type: asyncio.BaseTransport
+            ssl_object = asyncio_transport.get_extra_info("ssl_object")  # type: ssl.SSLObject
+            return ssl_object.getpeercert(binary_form=True)
 
     async def get_block_header(self, height, assert_mode):
         self.logger.info(f'requesting block header {height} in mode {assert_mode}')
