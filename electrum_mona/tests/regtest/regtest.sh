@@ -113,7 +113,7 @@ if [[ $1 == "forwarding" ]]; then
     request=$($carol add_lightning_request 0.01 -m "blah")
     $carol setconfig test_fail_malformed_htlc true
     $alice lnpay $request
-    request2=$($carol add_lightning_request 0.0001 -m "blah")
+    request2=$($carol add_lightning_request 0.01 -m "blah")
     $carol setconfig test_fail_malformed_htlc false
     $alice lnpay $request2
     carol_balance=$($carol list_channels | jq -r '.[0].local_balance')
