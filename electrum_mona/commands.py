@@ -299,6 +299,12 @@ class Commands:
         return True
 
     @command('')
+    async def get_ssl_domain(self):
+        """Check and return the SSL domain set in ssl_keyfile and ssl_certfile
+        """
+        return self.config.get_ssl_domain()
+
+    @command('')
     async def make_seed(self, nbits=132, language=None, seed_type=None):
         """Create a seed"""
         from .mnemonic import Mnemonic
@@ -858,7 +864,7 @@ class Commands:
     async def add_lightning_request(self, amount, memo='', expiration=3600, wallet: Abstract_Wallet = None):
         amount_sat = int(satoshis(amount))
         key = await wallet.lnworker._add_request_coro(amount_sat, memo, expiration)
-        return wallet.get_request(key)['invoice']
+        return wallet.get_request(key)
 
     @command('w')
     async def addtransaction(self, tx, wallet: Abstract_Wallet = None):
@@ -1003,16 +1009,17 @@ class Commands:
         return parse_lightning_invoice(invoice)
 
     @command('wn')
-    async def lnpay(self, invoice, attempts=1, timeout=10, wallet: Abstract_Wallet = None):
+    async def lnpay(self, invoice, attempts=1, timeout=30, wallet: Abstract_Wallet = None):
         lnworker = wallet.lnworker
         lnaddr = lnworker._check_invoice(invoice, None)
         payment_hash = lnaddr.paymenthash
         wallet.save_invoice(parse_lightning_invoice(invoice))
-        success = await lnworker._pay(invoice, attempts=attempts)
+        success, log = await lnworker._pay(invoice, attempts=attempts)
         return {
             'payment_hash': payment_hash.hex(),
             'success': success,
             'preimage': lnworker.get_preimage(payment_hash).hex() if success else None,
+            'log': [x.formatted_tuple() for x in log]
         }
 
     @command('w')
@@ -1200,6 +1207,7 @@ arg_types = {
     'encrypt_file': eval_bool,
     'rbf': eval_bool,
     'timeout': float,
+    'attempts': int,
 }
 
 config_variables = {
