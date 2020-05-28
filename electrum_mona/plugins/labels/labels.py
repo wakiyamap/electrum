@@ -3,7 +3,7 @@ import hashlib
 import json
 import sys
 import traceback
-from typing import Union
+from typing import Union, TYPE_CHECKING
 
 import base64
 
@@ -12,6 +12,9 @@ from electrum_mona.crypto import aes_encrypt_with_iv, aes_decrypt_with_iv
 from electrum_mona.i18n import _
 from electrum_mona.util import log_exceptions, ignore_exceptions, make_aiohttp_session
 from electrum_mona.network import Network
+
+if TYPE_CHECKING:
+    from electrum_mona.wallet import Abstract_Wallet
 
 
 class ErrorConnectingServer(Exception):
@@ -151,6 +154,9 @@ class LabelsPlugin(BasePlugin):
         self.logger.info(f"received {len(response)} labels")
         self.set_nonce(wallet, response["nonce"] + 1)
         self.on_pulled(wallet)
+
+    def on_pulled(self, wallet: 'Abstract_Wallet') -> None:
+        raise NotImplementedError()
 
     @ignore_exceptions
     @log_exceptions
