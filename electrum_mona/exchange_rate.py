@@ -146,19 +146,6 @@ class ExchangeBase(Logger):
         return sorted([str(a) for (a, b) in rates.items() if b is not None and len(a)==3])
 
 
-class ATAIX(ExchangeBase):
-    async def get_rates(self, ccy):
-        json = await self.get_json('api.ataix.com', '/api/prices/MONA-%s' % ccy)
-        return {ccy: Decimal(json['result'][0]['last'])}
-
-class BitcoinAverage(ExchangeBase):
-    async def get_rates(self, ccy):
-        json1 = await self.get_json('apiv2.bitcoinaverage.com', '/indices/crypto/ticker/MONABTC')
-        if ccy != "BTC":
-            json2 = await self.get_json('apiv2.bitcoinaverage.com', '/indices/global/ticker/BTC%s' % ccy)
-            return {ccy: Decimal(json1['last'])*Decimal(json2['last'])}
-        return {ccy: Decimal(json1['last'])}
-
 class Bittrex(ExchangeBase):
     async def get_rates(self, ccy):
         json1 = await self.get_json('bittrex.com', '/api/v1.1/public/getticker?market=btc-mona')
@@ -200,20 +187,25 @@ class DoveWallet(ExchangeBase):
         json = await self.get_json('api.dovewallet.com', '/v1.1/public/getticker?market=%s-mona' % ccy)
         return {ccy: Decimal(json['result']['Last'])}
 
-class Fisco(ExchangeBase):
+class Finexbox(ExchangeBase):
     async def get_rates(self, ccy):
-        json = await self.get_json('api.fcce.jp', '/api/1/last_price/mona_%s' % ccy.lower())
-        return {ccy: Decimal(json['last_price'])}
+        json = await self.get_json('xapi.finexbox.com', '/v1/ticker?market=mona_btc')
+        return {'BTC': Decimal(json['result']['price'])}
 
 class NebliDex(ExchangeBase):
     async def get_rates(self, ccy):
         json = await self.get_json('www.neblidex.xyz', '/seed/?v=1&api=get_market_price&market=MONA/%s' % ccy)
         return {ccy: Decimal(json)}
 
-class TradeSatoshi(ExchangeBase):
+class VALR(ExchangeBase):
     async def get_rates(self, ccy):
-        json = await self.get_json('tradesatoshi.com', '/api/public/getmarketsummary?market=MONA_BTC')
-        return {'BTC': Decimal(json['result']['last'])}
+        json = await self.get_json('api.valr.com', '/v1/public/MONABTC/marketsummary')
+        return {'BTC': Decimal(json['lastTradedPrice'])}
+
+class VCCExchange(ExchangeBase):
+    async def get_rates(self, ccy):
+        json = await self.get_json('vcc.exchange', '/api/v1/price-scope?lang=en&currency=btc&coin=mona')
+        return {'BTC': Decimal(json['data']['current_price'])}
 
 class Zaif(ExchangeBase):
     async def get_rates(self, ccy):
