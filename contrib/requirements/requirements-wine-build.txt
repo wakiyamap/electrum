@@ -4,5 +4,4 @@ setuptools
 # needed by pyinstaller:
 pefile>=2017.8.1
 altgraph
-pywin32>=227
 pywin32-ctypes>=0.2.0
