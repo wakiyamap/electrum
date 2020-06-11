@@ -313,8 +313,8 @@ def relayfee(network: 'Network' = None) -> int:
 
 
 # see https://github.com/bitcoin/bitcoin/blob/a62f0ed64f8bbbdfe6467ac5ce92ef5b5222d1bd/src/policy/policy.cpp#L14
-DUST_LIMIT_DEFAULT_SAT_LEGACY = 546
-DUST_LIMIT_DEFAULT_SAT_SEGWIT = 294
+DUST_LIMIT_DEFAULT_SAT_LEGACY = 54600
+DUST_LIMIT_DEFAULT_SAT_SEGWIT = 29400
 
 
 def dust_threshold(network: 'Network' = None) -> int:
