@@ -185,7 +185,9 @@ def sweep(privkeys, *, network: 'Network', config: 'SimpleConfig',
 
     tx = PartialTransaction.from_io(inputs, outputs, locktime=locktime, version=tx_version)
     # monacoin's rbf is disabled 
-    # tx.set_rbt(True)
+    #rbf = config.get('use_rbf', True)
+    #if rbf:
+    #    tx.set_rbf(True)
     tx.set_rbf(False)
     tx.sign(keypairs)
     return tx
