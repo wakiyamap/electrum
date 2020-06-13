@@ -109,7 +109,7 @@ jobs:
         # hack: travis already cloned the repo, but we re-clone now, as we need to have umask set BEFORE cloning
         - umask 0022
         - mkdir fresh_clone && cd fresh_clone
-        - git clone https://github.com/$TRAVIS_REPO_SLUG.git && cd electrum
+        - git clone https://github.com/$TRAVIS_REPO_SLUG.git && cd electrum-mona
         - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then git fetch origin pull/$TRAVIS_PULL_REQUEST/merge; fi
         - git checkout $TRAVIS_COMMIT
         - echo "Second git clone ready at $PWD"

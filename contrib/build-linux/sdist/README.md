@@ -20,7 +20,7 @@ folder.
 2. Build image
 
     ```
-    $ sudo docker build -t electrum-sdist-builder-img contrib/build-linux/sdist
+    $ sudo docker build -t electrum-mona-sdist-builder-img contrib/build-linux/sdist
     ```
 
 3. Build source tarballs
@@ -34,7 +34,7 @@ folder.
         umask 0022 && \
         mkdir -p $FRESH_CLONE && \
         cd $FRESH_CLONE  && \
-        git clone https://github.com/spesmilo/electrum.git && \
+        git clone https://github.com/wakiyamap/electrum-mona.git && \
         cd electrum
     ```
 
@@ -43,10 +43,10 @@ folder.
     $ git checkout $REV
     $ sudo docker run -it \
         --name electrum-sdist-builder-cont \
-        -v $PWD:/opt/electrum \
+        -v $PWD:/opt/electrum-mona \
         --rm \
-        --workdir /opt/electrum/contrib/build-linux/sdist \
-        electrum-sdist-builder-img \
+        --workdir /opt/electrum-mona/contrib/build-linux/sdist \
+        electrum-mona-sdist-builder-img \
         ./build.sh
     ```
 4. The generated distributables are in `./dist`.
