@@ -42,6 +42,7 @@ from .lnutil import ChannelConstraints, Outpoint, ShachainElement
 from .json_db import StoredDict, JsonDB, locked, modifier
 from .plugin import run_hook, plugin_loaders
 from .paymentrequest import PaymentRequest
+from .submarine_swaps import SwapData
 
 if TYPE_CHECKING:
     from .storage import WalletStorage
@@ -619,7 +620,7 @@ class WalletDB(JsonDB):
                     'type': _type,
                     'message': r.get('message') or r.get('memo', ''),
                     'amount': r.get('amount'),
-                    'exp': r.get('exp', 0),
+                    'exp': r.get('exp') or 0,
                     'time': r.get('time', 0),
                 }
                 if _type == PR_TYPE_ONCHAIN:
@@ -1133,6 +1134,8 @@ class WalletDB(JsonDB):
             v = dict((k, UpdateAddHtlc.from_tuple(*x)) for k, x in v.items())
         elif key == 'fee_updates':
             v = dict((k, FeeUpdate(**x)) for k, x in v.items())
+        elif key == 'submarine_swaps':
+            v = dict((k, SwapData(**x)) for k, x in v.items())
         elif key == 'channel_backups':
             v = dict((k, ChannelBackupStorage(**x)) for k, x in v.items())
         elif key == 'tx_fees':

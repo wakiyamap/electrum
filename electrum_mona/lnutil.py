@@ -74,13 +74,13 @@ class Config(StoredObject):
     htlc_basepoint = attr.ib(type=OnlyPubkeyKeypair, converter=json_to_keypair)
     delayed_basepoint = attr.ib(type=OnlyPubkeyKeypair, converter=json_to_keypair)
     revocation_basepoint = attr.ib(type=OnlyPubkeyKeypair, converter=json_to_keypair)
-    to_self_delay = attr.ib(type=int)
-    dust_limit_sat = attr.ib(type=int)
-    max_htlc_value_in_flight_msat = attr.ib(type=int)
-    max_accepted_htlcs = attr.ib(type=int)
+    to_self_delay = attr.ib(type=int)  # applies to OTHER ctx
+    dust_limit_sat = attr.ib(type=int)  # applies to SAME ctx
+    max_htlc_value_in_flight_msat = attr.ib(type=int)  # max val of INCOMING htlcs
+    max_accepted_htlcs = attr.ib(type=int)  # max num of INCOMING htlcs
     initial_msat = attr.ib(type=int)
-    reserve_sat = attr.ib(type=int)
-    htlc_minimum_msat = attr.ib(type=int)
+    reserve_sat = attr.ib(type=int)  # applies to OTHER ctx
+    htlc_minimum_msat = attr.ib(type=int)  # smallest value for INCOMING htlc
 
     def validate_params(self, *, funding_sat: int) -> None:
         for key in (
@@ -102,6 +102,8 @@ class Config(StoredObject):
             raise Exception(f'reserve too high: {self.reserve_sat}, funding_sat: {funding_sat}')
         if self.htlc_minimum_msat > 1_000:
             raise Exception(f"htlc_minimum_msat too high: {self.htlc_minimum_msat} msat")
+        if self.htlc_minimum_msat < 1:
+            raise Exception(f"htlc_minimum_msat too low: {self.htlc_minimum_msat} msat")
         if self.max_accepted_htlcs < 1:
             raise Exception(f"max_accepted_htlcs too low: {self.max_accepted_htlcs}")
         if self.max_accepted_htlcs > 483:
@@ -153,6 +155,8 @@ class ChannelConstraints(StoredObject):
     is_initiator = attr.ib(type=bool)  # note: sometimes also called "funder"
     funding_txn_minimum_depth = attr.ib(type=int)
 
+
+CHANNEL_BACKUP_VERSION = 0
 @attr.s
 class ChannelBackupStorage(StoredObject):
     node_id = attr.ib(type=bytes, converter=hex_to_bytes)
@@ -178,6 +182,7 @@ class ChannelBackupStorage(StoredObject):
 
     def to_bytes(self):
         vds = BCDataStream()
+        vds.write_int16(CHANNEL_BACKUP_VERSION)
         vds.write_boolean(self.is_initiator)
         vds.write_bytes(self.privkey, 32)
         vds.write_bytes(self.channel_seed, 32)
@@ -197,6 +202,9 @@ class ChannelBackupStorage(StoredObject):
     def from_bytes(s):
         vds = BCDataStream()
         vds.write(s)
+        version = vds.read_int16()
+        if version != CHANNEL_BACKUP_VERSION:
+            raise Exception(f"unknown version for channel backup: {version}")
         return ChannelBackupStorage(
             is_initiator = bool(vds.read_bytes(1)),
             privkey = vds.read_bytes(32).hex(),
@@ -638,8 +646,12 @@ class HTLCOwner(IntFlag):
     LOCAL = 1
     REMOTE = -LOCAL
 
-    def inverted(self):
-        return HTLCOwner(-self)
+    def inverted(self) -> 'HTLCOwner':
+        return -self
+
+    def __neg__(self) -> 'HTLCOwner':
+        return HTLCOwner(super().__neg__())
+
 
 class Direction(IntFlag):
     SENT = -1     # in the context of HTLCs: "offered" HTLCs
@@ -653,10 +665,14 @@ REMOTE = HTLCOwner.REMOTE
 
 def make_commitment_outputs(*, fees_per_participant: Mapping[HTLCOwner, int], local_amount_msat: int, remote_amount_msat: int,
         local_script: str, remote_script: str, htlcs: List[ScriptHtlc], dust_limit_sat: int) -> Tuple[List[PartialTxOutput], List[PartialTxOutput]]:
-    to_local_amt = local_amount_msat - fees_per_participant[LOCAL]
+    # BOLT-03: "Base commitment transaction fees are extracted from the funder's amount;
+    #           if that amount is insufficient, the entire amount of the funder's output is used."
+    #   -> if funder cannot afford feerate, their output might go negative, so take max(0, x) here:
+    to_local_amt = max(0, local_amount_msat - fees_per_participant[LOCAL])
     to_local = PartialTxOutput(scriptpubkey=bfh(local_script), value=to_local_amt // 1000)
-    to_remote_amt = remote_amount_msat - fees_per_participant[REMOTE]
+    to_remote_amt = max(0, remote_amount_msat - fees_per_participant[REMOTE])
     to_remote = PartialTxOutput(scriptpubkey=bfh(remote_script), value=to_remote_amt // 1000)
+
     non_htlc_outputs = [to_local, to_remote]
     htlc_outputs = []
     for script, htlc in htlcs:
