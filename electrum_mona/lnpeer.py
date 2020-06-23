@@ -53,7 +53,7 @@ from .lnutil import ln_dummy_address
 from .json_db import StoredDict
 
 if TYPE_CHECKING:
-    from .lnworker import LNWorker, LNGossip, LNWallet
+    from .lnworker import LNWorker, LNGossip, LNWallet, LNBackups
     from .lnrouter import RouteEdge, LNPaymentRoute
     from .transaction import PartialTransaction
 
@@ -64,7 +64,12 @@ LN_P2P_NETWORK_TIMEOUT = 20
 class Peer(Logger):
     LOGGING_SHORTCUT = 'P'
 
-    def __init__(self, lnworker: Union['LNGossip', 'LNWallet'], pubkey:bytes, transport: LNTransportBase):
+    def __init__(
+            self,
+            lnworker: Union['LNGossip', 'LNWallet', 'LNBackups'],
+            pubkey: bytes,
+            transport: LNTransportBase
+    ):
         self._sent_init = False  # type: bool
         self._received_init = False  # type: bool
         self.initialized = asyncio.Future()
@@ -162,6 +167,10 @@ class Peer(Logger):
 
     def process_message(self, message):
         message_type, payload = decode_msg(message)
+        # only process INIT if we are a backup
+        from .lnworker import LNBackups
+        if isinstance(self.lnworker, LNBackups) and message_type != 'init':
+            return
         if message_type in self.ordered_messages:
             chan_id = payload.get('channel_id') or payload["temporary_channel_id"]
             self.ordered_message_queues[chan_id].put_nowait((message_type, payload))
@@ -424,9 +433,6 @@ class Peer(Logger):
             chain_hash=constants.net.rev_genesis_bytes(),
             first_blocknum=first_block,
             number_of_blocks=num_blocks)
-
-    def encode_short_ids(self, ids):
-        return chr(1) + zlib.compress(bfh(''.join(ids)))
 
     def decode_short_ids(self, encoded):
         if encoded[0] == 0:
@@ -770,12 +776,12 @@ class Peer(Logger):
 
     async def trigger_force_close(self, channel_id):
         await self.initialized
-        latest_point = 0
+        latest_point = secret_to_pubkey(42) # we need a valid point (BOLT2)
         self.send_message(
             "channel_reestablish",
             channel_id=channel_id,
-            next_local_commitment_number=0,
-            next_remote_revocation_number=0,
+            next_commitment_number=0,
+            next_revocation_number=0,
             your_last_per_commitment_secret=0,
             my_current_per_commitment_point=latest_point)
 
@@ -1180,6 +1186,7 @@ class Peer(Logger):
             timestamp=int(time.time()),
             htlc_id=htlc_id)
         chan.receive_htlc(htlc, onion_packet)
+        util.trigger_callback('htlc_added', chan, htlc, RECEIVED)
 
     def maybe_forward_htlc(self, chan: Channel, htlc: UpdateAddHtlc, *,
                            onion_packet: OnionPacket, processed_onion: ProcessedOnionPacket

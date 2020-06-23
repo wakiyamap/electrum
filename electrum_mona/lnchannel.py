@@ -80,7 +80,9 @@ class ChannelState(IntEnum):
     OPEN            = 3  # both parties have sent funding_locked
     SHUTDOWN        = 4  # shutdown has been sent.
     CLOSING         = 5  # closing negotiation done. we have a fully signed tx.
-    FORCE_CLOSING   = 6  # we force-closed, and closing tx is unconfirmed. (otherwise we remain OPEN)
+    FORCE_CLOSING   = 6  # we force-closed, and closing tx is unconfirmed. Note that if the
+                         # remote force-closes then we remain OPEN until it gets mined -
+                         # the server could be lying to us with a fake tx.
     CLOSED          = 7  # closing tx has been mined
     REDEEMED        = 8  # we can stop watching
 
@@ -134,7 +136,7 @@ class RevokeAndAck(NamedTuple):
 class RemoteCtnTooFarInFuture(Exception): pass
 
 
-def htlcsum(htlcs):
+def htlcsum(htlcs: Iterable[UpdateAddHtlc]):
     return sum([x.amount_msat for x in htlcs])
 
 
@@ -291,6 +293,9 @@ class AbstractChannel(Logger, ABC):
                             closing_txid: str, closing_height: TxMinedInfo, keep_watching: bool) -> None:
         self.save_funding_height(txid=funding_txid, height=funding_height.height, timestamp=funding_height.timestamp)
         self.save_closing_height(txid=closing_txid, height=closing_height.height, timestamp=closing_height.timestamp)
+        if funding_height.conf>0:
+            self.set_short_channel_id(ShortChannelID.from_components(
+                funding_height.height, funding_height.txpos, self.funding_outpoint.output_index))
         if self.get_state() < ChannelState.CLOSED:
             conf = closing_height.conf
             if conf > 0:
@@ -433,9 +438,15 @@ class ChannelBackup(AbstractChannel):
     def is_initiator(self):
         return self.cb.is_initiator
 
+    def short_id_for_GUI(self) -> str:
+        if self.short_channel_id:
+            return 'BACKUP of ' + format_short_channel_id(self.short_channel_id)
+        else:
+            return 'BACKUP'
+
     def get_state_for_GUI(self):
         cs = self.get_state()
-        return 'BACKUP, ' + cs.name
+        return cs.name
 
     def get_oldest_unrevoked_ctn(self, who):
         return -1

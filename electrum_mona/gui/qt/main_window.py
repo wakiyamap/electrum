@@ -54,15 +54,14 @@ from electrum_mona import (keystore, ecc, constants, util, bitcoin, commands,
 from electrum_mona.bitcoin import COIN, is_address
 from electrum_mona.plugin import run_hook, BasePlugin
 from electrum_mona.i18n import _
-from electrum_mona.util import (format_time, format_satoshis, format_fee_satoshis,
-                           format_satoshis_plain,
+from electrum_mona.util import (format_time,
                            UserCancelled, profiler,
                            bh2u, bfh, InvalidPassword,
                            UserFacingException,
                            get_new_wallet_name, send_exception_to_crash_reporter,
                            InvalidBitcoinURI, maybe_extract_bolt11_invoice, NotEnoughFunds,
                            NoDynamicFeeEstimates, MultipleSpendMaxTxOutputs)
-from electrum_mona.invoices import PR_TYPE_ONCHAIN, PR_TYPE_LN, PR_DEFAULT_EXPIRATION_WHEN_CREATING
+from electrum_mona.invoices import PR_TYPE_ONCHAIN, PR_TYPE_LN, PR_DEFAULT_EXPIRATION_WHEN_CREATING, Invoice
 from electrum_mona.invoices import PR_PAID, PR_FAILED, pr_expiration_values, LNInvoice, OnchainInvoice
 from electrum_mona.transaction import (Transaction, PartialTxInput,
                                   PartialTransaction, PartialTxOutput)
@@ -159,6 +158,8 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
     computing_privkeys_signal = pyqtSignal()
     show_privkeys_signal = pyqtSignal()
     show_error_signal = pyqtSignal(str)
+
+    payment_request: Optional[paymentrequest.PaymentRequest]
 
     def __init__(self, gui_object: 'ElectrumGui', wallet: Abstract_Wallet):
         QMainWindow.__init__(self)
@@ -488,7 +489,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
     def load_wallet(self, wallet):
         wallet.thread = TaskThread(self, self.on_error)
         self.update_recently_visited(wallet.storage.path)
-        if wallet.lnworker:
+        if wallet.has_lightning():
             util.trigger_callback('channels_updated', wallet)
         self.need_update.set()
         # Once GUI has been initialized check if we want to announce something since the callback has been called before the GUI was initialized
@@ -585,7 +586,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
 
     def select_backup_dir(self, b):
         name = self.config.get('backup_dir', '')
-        dirname = QFileDialog.getExistingDirectory(self, "Select your SSL certificate file", name)
+        dirname = QFileDialog.getExistingDirectory(self, "Select your wallet backup directory", name)
         if dirname:
             self.config.set_key('backup_dir', dirname)
             self.backup_dir_e.setText(dirname)
@@ -598,7 +599,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         backup_dir = self.config.get('backup_dir')
         backup_dir_label = HelpLabel(_('Backup directory') + ':', backup_help)
         msg = _('Please select a backup directory')
-        if self.wallet.lnworker and self.wallet.lnworker.channels:
+        if self.wallet.has_lightning() and self.wallet.lnworker.channels:
             msg += '\n\n' + ' '.join([
                 _("Note that lightning channels will be converted to channel backups."),
                 _("You cannot use channel backups to perform lightning payments."),
@@ -879,9 +880,11 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         self.notify_transactions()
 
     def format_amount(self, x, is_diff=False, whitespaces=False):
+        # x is in sats
         return self.config.format_amount(x, is_diff=is_diff, whitespaces=whitespaces)
 
     def format_amount_and_units(self, amount):
+        # amount is in sats
         text = self.config.format_amount_and_units(amount)
         x = self.fx.format_amount_and_units(amount) if self.fx else None
         if text and x:
@@ -964,10 +967,9 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
                     text +=  " [%s unconfirmed]"%(self.format_amount(u, is_diff=True).strip())
                 if x:
                     text +=  " [%s unmatured]"%(self.format_amount(x, is_diff=True).strip())
-                if self.wallet.lnworker:
+                if self.wallet.has_lightning():
                     l = self.wallet.lnworker.get_balance()
                     text += u'    \U0001f5f2 %s'%(self.format_amount_and_units(l).strip())
-
                 # append fiat balance and price
                 if self.fx.is_enabled():
                     text += self.fx.get_fiat_status_text(c + u + x,
@@ -1483,13 +1485,17 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
 
         return False  # no errors
 
-    def pay_lightning_invoice(self, invoice: str, amount_sat: int):
+    def pay_lightning_invoice(self, invoice: str, *, amount_msat: Optional[int]):
+        if amount_msat is None:
+            raise Exception("missing amount for LN invoice")
+        amount_sat = Decimal(amount_msat) / 1000
+        # FIXME this is currently lying to user as we truncate to satoshis
         msg = _("Pay lightning invoice?") + '\n\n' + _("This will send {}?").format(self.format_amount_and_units(amount_sat))
         if not self.question(msg):
             return
         attempts = LN_NUM_PAYMENT_ATTEMPTS
         def task():
-            self.wallet.lnworker.pay(invoice, amount_sat, attempts=attempts)
+            self.wallet.lnworker.pay(invoice, amount_msat=amount_msat, attempts=attempts)
         self.do_clear()
         self.wallet.thread.add(task)
         self.invoice_list.update()
@@ -1522,14 +1528,14 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
             invoice_str = self.payto_e.lightning_invoice
             if not invoice_str:
                 return
-            if not self.wallet.lnworker:
+            if not self.wallet.has_lightning():
                 self.show_error(_('Lightning is disabled'))
                 return
             invoice = LNInvoice.from_bech32(invoice_str)
-            if invoice.amount is None:
-                amount = self.amount_e.get_amount()
-                if amount:
-                    invoice.amount = amount
+            if invoice.get_amount_msat() is None:
+                amount_sat = self.amount_e.get_amount()
+                if amount_sat:
+                    invoice.amount_msat = int(amount_sat * 1000)
                 else:
                     self.show_error(_('No amount'))
                     return
@@ -1568,10 +1574,12 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
             outputs += invoice.outputs
         self.pay_onchain_dialog(self.get_coins(), outputs)
 
-    def do_pay_invoice(self, invoice):
+    def do_pay_invoice(self, invoice: 'Invoice'):
         if invoice.type == PR_TYPE_LN:
-            self.pay_lightning_invoice(invoice.invoice, invoice.amount)
+            assert isinstance(invoice, LNInvoice)
+            self.pay_lightning_invoice(invoice.invoice, amount_msat=invoice.get_amount_msat())
         elif invoice.type == PR_TYPE_ONCHAIN:
+            assert isinstance(invoice, OnchainInvoice)
             self.pay_onchain_dialog(self.get_coins(), invoice.outputs)
         else:
             raise Exception('unknown invoice type')
@@ -1840,8 +1848,8 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         self.payto_e.setFrozen(True)
         self.payto_e.setText(pubkey)
         self.message_e.setText(description)
-        if lnaddr.amount is not None:
-            self.amount_e.setAmount(lnaddr.amount * COIN)
+        if lnaddr.get_amount_sat() is not None:
+            self.amount_e.setAmount(lnaddr.get_amount_sat())
         #self.amount_e.textEdited.emit("")
         self.set_onchain(False)
 
@@ -1982,7 +1990,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         self.update_completions()
 
     def show_onchain_invoice(self, invoice: OnchainInvoice):
-        amount_str = self.format_amount(invoice.amount) + ' ' + self.base_unit()
+        amount_str = self.format_amount(invoice.amount_sat) + ' ' + self.base_unit()
         d = WindowModalDialog(self, _("Onchain Invoice"))
         vbox = QVBoxLayout(d)
         grid = QGridLayout()
@@ -2032,7 +2040,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         grid.addWidget(QLabel(_("Node ID") + ':'), 0, 0)
         grid.addWidget(QLabel(lnaddr.pubkey.serialize().hex()), 0, 1)
         grid.addWidget(QLabel(_("Amount") + ':'), 1, 0)
-        amount_str = self.format_amount(invoice.amount) + ' ' + self.base_unit()
+        amount_str = self.format_amount(invoice.get_amount_sat()) + ' ' + self.base_unit()
         grid.addWidget(QLabel(amount_str), 1, 1)
         grid.addWidget(QLabel(_("Description") + ':'), 2, 0)
         grid.addWidget(QLabel(invoice.message), 2, 1)
@@ -2396,10 +2404,12 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         d = SeedDialog(self, seed, passphrase)
         d.exec_()
 
-    def show_qrcode(self, data, title = _("QR code"), parent=None, help_text=None):
+    def show_qrcode(self, data, title = _("QR code"), parent=None, *,
+                    help_text=None, show_copy_text_btn=False):
         if not data:
             return
-        d = QRDialog(data, parent or self, title, help_text=help_text)
+        d = QRDialog(data, parent or self, title, help_text=help_text,
+                     show_copy_text_btn=show_copy_text_btn)
         d.exec_()
 
     @protected
@@ -2606,7 +2616,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
             self.show_critical(_("Electrum was unable to parse your transaction") + ":\n" + repr(e))
             return
 
-    def import_channel_backup(self, encrypted):
+    def import_channel_backup(self, encrypted: str):
         if not self.question('Import channel backup?'):
             return
         try:
@@ -2658,6 +2668,13 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         tx = self.tx_from_text(text)
         if tx:
             self.show_transaction(tx)
+
+    def do_process_from_text_channel_backup(self):
+        text = text_dialog(self, _('Input channel backup'), _("Channel Backup:"), _("Load backup"))
+        if not text:
+            return
+        if text.startswith('channel_backup:'):
+            self.import_channel_backup(text)
 
     def do_process_from_file(self):
         tx = self.read_tx_from_file()
