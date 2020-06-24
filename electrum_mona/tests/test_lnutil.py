@@ -11,6 +11,7 @@ from electrum_mona.lnutil import (RevocationStore, get_per_commitment_secret_fro
                              ScriptHtlc, extract_nodeid, calc_fees_for_commitment_tx, UpdateAddHtlc, LnFeatures)
 from electrum_mona.util import bh2u, bfh, MyEncoder
 from electrum_mona.transaction import Transaction, PartialTransaction
+from electrum_mona.lnworker import LNWallet
 
 from . import ElectrumTestCase
 
@@ -805,3 +806,24 @@ class TestLNUtil(ElectrumTestCase):
                          features.for_invoice())
         features = LnFeatures.BASIC_MPP_OPT | LnFeatures.PAYMENT_SECRET_REQ | LnFeatures.VAR_ONION_REQ
         self.assertEqual(features, features.for_invoice())
+
+    def test_lnworker_decode_channel_update_msg(self):
+        msg_without_prefix = bytes.fromhex("439b71c8ddeff63004e4ff1f9764a57dcf20232b79d9d669aef0e31c42be8e44208f7d868d0133acb334047f30e9399dece226ccd98e5df5330adf7f35629051b68b8c410d2ea4afd74fb56e370bfc1bedf929e1453896c9e79dd116011c9fff08762700054a00005ef2cf9c0101009000000000000003e80000000000000001000000002367b880")
+        print(msg_without_prefix)
+        # good messages
+        self.assertNotEqual(
+            None,
+            LNWallet._decode_channel_update_msg(msg_without_prefix))
+        self.assertNotEqual(
+            None,
+            LNWallet._decode_channel_update_msg(bytes.fromhex("0102") + msg_without_prefix))
+        # bad messages
+        self.assertEqual(
+            None,
+            LNWallet._decode_channel_update_msg(bytes.fromhex("0102030405")))
+        self.assertEqual(
+            None,
+            LNWallet._decode_channel_update_msg(bytes.fromhex("ffff") + msg_without_prefix))
+        self.assertEqual(
+            None,
+            LNWallet._decode_channel_update_msg(bytes.fromhex("0101") + msg_without_prefix))
