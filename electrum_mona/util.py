@@ -713,6 +713,8 @@ def time_difference(distance_in_time, include_seconds):
 mainnet_block_explorers = {
     'bchain.info': ('https://bchain.info/MONA/',
                         {'tx': 'tx/', 'addr': 'addr/'}),
+    'esplora': ('https://esplora.electrum-mona.org/',
+                        {'tx': 'tx/', 'addr': 'address/'}),
     'insight.monaco-ex.org': ('https://mona.insight.monaco-ex.org/insight/',
                         {'tx': 'tx/', 'addr': 'address/'}),
     'insight.electrum-mona.org': ('https://insight.electrum-mona.org/insight/',
@@ -730,6 +732,8 @@ mainnet_block_explorers = {
 }
 
 testnet_block_explorers = {
+    'esplora': ('https://esplora.electrum-mona.org/testnet/',
+                        {'tx': 'tx/', 'addr': 'address/'}),
     'testnet.blockbook.electrum-mona.org': ('https://testnet-blockbook.electrum-mona.org/',
                         {'tx': 'tx/', 'addr': 'address/'}),
     'insight.monaco-ex.org': ('https://testnet-mona.insight.monaco-ex.org/insight/',

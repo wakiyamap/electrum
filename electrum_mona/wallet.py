@@ -78,7 +78,7 @@ from .mnemonic import Mnemonic
 from .logging import get_logger
 from .lnworker import LNWallet, LNBackups
 from .paymentrequest import PaymentRequest
-from .util import read_json_file, write_json_file
+from .util import read_json_file, write_json_file, UserFacingException
 
 if TYPE_CHECKING:
     from .network import Network
@@ -159,7 +159,7 @@ async def sweep_preparations(privkeys, network: 'Network', imax=100):
                 # we also search for pay-to-pubkey outputs
                 await group.spawn(find_utxos_for_privkey('p2pk', privkey, compressed))
     if not inputs:
-        raise Exception(_('No inputs found.'))
+        raise UserFacingException(_('No inputs found.'))
     return inputs, keypairs
 
 
@@ -726,6 +726,10 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
 
     def clear_invoices(self):
         self.invoices = {}
+        self.save_db()
+
+    def clear_requests(self):
+        self.receive_requests = {}
         self.save_db()
 
     def get_invoices(self):
@@ -1670,7 +1674,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
             status = self.lnworker.get_payment_status(bfh(r.rhash)) if self.lnworker else PR_UNKNOWN
         else:
             assert isinstance(r, OnchainInvoice)
-            paid, conf = self.get_payment_status(r.get_address(), r.amount_sat)
+            paid, conf = self.get_payment_status(r.get_address(), r.get_amount_sat())
             status = PR_PAID if paid else PR_UNPAID
         return self.check_expired_status(r, status)
 
@@ -1711,10 +1715,9 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         else:
             assert isinstance(x, OnchainInvoice)
             amount_sat = x.get_amount_sat()
-            assert isinstance(amount_sat, (int, str, type(None)))
-            d['amount_sat'] = amount_sat
             addr = x.get_address()
-            paid, conf = self.get_payment_status(addr, x.amount_sat)
+            paid, conf = self.get_payment_status(addr, amount_sat)
+            d['amount_sat'] = amount_sat
             d['address'] = addr
             d['URI'] = self.get_request_URI(x)
             if conf is not None:
