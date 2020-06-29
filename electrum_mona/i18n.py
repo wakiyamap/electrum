@@ -49,7 +49,6 @@ def set_language(x):
     if x:
         language = gettext.translation('electrum', LOCALE_DIR, fallback=True, languages=[x])
 
-        
 languages = {
     '': _('Default'),
     'ar_SA': _('Arabic'),

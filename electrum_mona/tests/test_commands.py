@@ -21,7 +21,7 @@ class TestCommands(ElectrumTestCase):
     def tearDown(self):
         super().tearDown()
         self.asyncio_loop.call_soon_threadsafe(self._stop_loop.set_result, 1)
-        self._loop_thread.join(timeout=1)       
+        self._loop_thread.join(timeout=1)
 
     def test_setconfig_non_auth_number(self):
         self.assertEqual(7777, Commands._setconfig_normalize_value('rpcport', "7777"))

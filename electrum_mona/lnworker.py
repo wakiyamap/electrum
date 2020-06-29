@@ -60,7 +60,7 @@ from .lnutil import (Outpoint, LNPeerAddr,
 from .lnutil import ln_dummy_address, ln_compare_features, IncompatibleLightningFeatures
 from .transaction import PartialTxOutput, PartialTransaction, PartialTxInput
 from .lnonion import OnionFailureCode, process_onion_packet, OnionPacket
-from .lnmsg import decode_msg, encode_msg
+from .lnmsg import decode_msg
 from .i18n import _
 from .lnrouter import (RouteEdge, LNPaymentRoute, LNPaymentPath, is_route_sane_to_use,
                        NoChannelPolicy, LNPathInconsistent)

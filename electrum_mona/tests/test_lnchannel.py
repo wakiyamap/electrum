@@ -266,6 +266,7 @@ class TestChannel(ElectrumTestCase):
         htlc = self.htlc
 
         alice_out = alice_channel.get_latest_commitment(LOCAL).outputs()
+        # TODO monacoin is OK?
         short_idx, = [idx for idx, x in enumerate(alice_out) if len(x.address) == 44]
         long_idx,  = [idx for idx, x in enumerate(alice_out) if len(x.address) == 64]
         self.assertLess(alice_out[long_idx].value, 5 * 10**8, alice_out)
@@ -677,7 +678,7 @@ class TestAvailableToSpend(ElectrumTestCase):
             'timestamp'   :  0,
         }
 
-        #I can't prepare the quantity for test. TODO monacoin is ok?
+        #I can't prepare the quantity for test. TODO monacoin is OK?
         #alice_channel._ignore_max_htlc_value = False
         #bob_channel._ignore_max_htlc_value = False
         #with self.assertRaises(lnutil.PaymentFailure):
