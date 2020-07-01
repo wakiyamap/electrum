@@ -317,7 +317,7 @@ MIN_FUNDING_SAT = 200_000
 
 # the minimum cltv_expiry accepted for newly received HTLCs
 # note: when changing, consider Blockchain.is_tip_stale()
-MIN_FINAL_CLTV_EXPIRY_ACCEPTED = 144 #TODO monacoin is OK?
+MIN_FINAL_CLTV_EXPIRY_ACCEPTED = 960 #TODO monacoin is OK?
 # set it a tiny bit higher for invoices as blocks could get mined
 # during forward path of payment
 MIN_FINAL_CLTV_EXPIRY_FOR_INVOICE = MIN_FINAL_CLTV_EXPIRY_ACCEPTED + 3
@@ -337,7 +337,7 @@ OUR_FEE_PROPORTIONAL_MILLIONTHS = 1
 
 NBLOCK_CLTV_EXPIRY_TOO_FAR_INTO_FUTURE = 28 * 960
 
-MAXIMUM_REMOTE_TO_SELF_DELAY_ACCEPTED = 2016
+MAXIMUM_REMOTE_TO_SELF_DELAY_ACCEPTED = 13440
 
 class RevocationStore:
     # closely based on code in lightningnetwork/lnd
