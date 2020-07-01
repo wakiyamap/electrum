@@ -195,12 +195,12 @@ class TestCommandsTestnet(TestCaseForTestnet):
             ],
             "outputs": [
                 {
-                    "address": "tb1q4s8z6g5jqzllkgt8a4har94wl8tg0k9m8kv5zd",
+                    "address": "tmona1q6h4n2rkl9vr2dka0ac00gpztrx0xkd0568925z",
                     "value": 990000
                 }
             ]
         }
-        self.assertEqual("0200000000010139c5375fe9da7bd377c1783002b129f8c57d3e724d62f5eacb9739ca691a229d0100000000fdffffff01301b0f0000000000160014ac0e2d229200bffb2167ed6fd196aef9d687d8bb0247304402201c551df0458528d19ba1dd79b134dcf0055f7b029dfc3d0d024e6253d069d13e02206d03cfc85a6fc648acb6fc6be630e4567d1dd00ddbcdee551ee0711414e2f33f0121021f110909ded653828a254515b58498a6bafc96799fb0851554463ed44ca7d9da00000000",
+        self.assertEqual("0200000000010139c5375fe9da7bd377c1783002b129f8c57d3e724d62f5eacb9739ca691a229d0100000000fdffffff01301b0f0000000000160014d5eb350edf2b06a6dbafee1ef4044b199e6b35f402473044022054c5f88cc76a1b342592a2fe3cbd2722d572408cd48bd086d00027de0b0b8cfc02205cbdbb8ca0ec6d284e15a576269d79d6e74f5ed6d754c004e139022138c849c80121021f110909ded653828a254515b58498a6bafc96799fb0851554463ed44ca7d9da00000000",
                          cmds._run('serialize', (jsontx,)))
 
     @mock.patch.object(wallet.Abstract_Wallet, 'save_db')
