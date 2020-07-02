@@ -438,7 +438,7 @@ def lndecode(invoice: str, *, verbose=False, expected_hrp=None) -> LnAddr:
             addr.pubkey = pubkeybytes
 
         elif tag == 'c':
-            addr._min_final_cltv_expiry = tagdata.int
+            addr._min_final_cltv_expiry = tagdata.uint
 
         elif tag == '9':
             features = tagdata.uint
