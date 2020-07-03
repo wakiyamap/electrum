@@ -562,7 +562,7 @@ class Blockchain(Logger):
         return new_bits
 
 
-    def get_target_dgwv3(self, height, chain=None) -> int:
+    def get_target_dgwv3(self, height, chain={}) -> int:
 
         last = chain.get(height - 1)
         if last is None:
@@ -624,7 +624,7 @@ class Blockchain(Logger):
         return bnNew
 
 
-    def get_target(self, height, chain=None) -> int:
+    def get_target(self, height, chain={}) -> int:
         if constants.net.TESTNET:
             return 0
         elif height // 2016 < len(constants.net.CHECKPOINTS) and height % 2016 == 2015:
@@ -715,10 +715,14 @@ class Blockchain(Logger):
         cp = []
         n = self.height() // 2016
         for index in range(n):
-            h = self.get_hash((index+1) * 2016 -1)
-            header = self.read_header((index+1) * 2016 -1)
-            target = self.bits_to_target(header.get('bits'))
-            cp.append((h, target))
+            if index < len(constants.net.CHECKPOINTS) :
+                h, target = constants.net.CHECKPOINTS[index]
+                cp.append((h, target))
+            else :
+                h = self.get_hash((index+1) * 2016 -1)
+                header = self.read_header((index+1) * 2016 -1)
+                target = self.bits_to_target(header.get('bits'))
+                cp.append((h, target))
         return cp
 
 
