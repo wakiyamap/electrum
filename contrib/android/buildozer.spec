@@ -46,6 +46,9 @@ requirements =
     libffi,
     libsecp256k1,
     cryptography,
+    # This hack seems to be necessary for lyra2rev2.
+    # From electrum-grs. thanks!
+    setuptools,
     lyra2re2_hash
 
 # (str) Presplash of the application
