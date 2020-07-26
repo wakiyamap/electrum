@@ -10,4 +10,4 @@ aiohttp_socks>=0.3
 certifi
 bitstring
 attrs>=19.2.0
-lyra2re2_hash==1.2.0
+git+git://github.com/wakiyamap/lyra2re-hash-python@1.2.1#lyra2re2_hash
