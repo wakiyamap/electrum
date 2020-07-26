@@ -5,7 +5,7 @@ NSIS_FILENAME=nsis-3.05-setup.exe
 NSIS_URL=https://prdownloads.sourceforge.net/nsis/$NSIS_FILENAME?download
 NSIS_SHA256=1a3cc9401667547b9b9327a177b13485f7c59c2303d4b6183e7bc9e6c8d6bfdb
 
-LYRA2RE_HASH_PYTHON_URL=https://github.com/wakiyamap/lyra2re-hash-python/releases/download/1.2.1/lyra2re2_hash-1.2.1-cp37-cp37m-win32.whl
+LYRA2RE_HASH_PYTHON_URL=https://github.com/wakiyamap/lyra2re-hash-python/releases/download/1.1.2/lyra2re2_hash-1.1.2-cp37-cp37m-win32.whl
 
 ZBAR_FILENAME=zbarw-20121031-setup.exe
 ZBAR_URL=https://astuteinternet.dl.sourceforge.net/project/zbarw/$ZBAR_FILENAME
