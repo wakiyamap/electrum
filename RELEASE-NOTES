@@ -1,3 +1,7 @@
+# Release 4.0.2.1 - (August 2, 2020)
+ - Fix windows setup error (include libgcc_s_dw2-1.dll)
+ - other minor fixes
+
 # Release 4.0.2 - (July 8, 2020)
  - rm old corrupted non-bip70 invoices (#6345)
  - other minor fixes
