@@ -7,7 +7,7 @@ NSIS_SHA256=1a3cc9401667547b9b9327a177b13485f7c59c2303d4b6183e7bc9e6c8d6bfdb
 
 LYRA2RE_HASH_PYTHON_URL=https://github.com/wakiyamap/lyra2re-hash-python/releases/download/1.1.2/lyra2re2_hash-1.1.2-cp37-cp37m-win32.whl
 LYRA2RE_HASH_PYTHON_FILENAME=lyra2re2_hash-1.1.2-cp37-cp37m-win32.whl
-LYRA2RE_HASH_PYTHON_SHA256=eb389c5556e38e1e1127ec2e7c69d9ed7498224d41ee82d61d10cb8ecb8572e5
+LYRA2RE_HASH_PYTHON_SHA256=de1ce0cbccbcb779c4c9f8b0704c844c613f27ef286a5c94a55b0891528eb4cd
 
 ZBAR_FILENAME=zbarw-20121031-setup.exe
 ZBAR_URL=https://astuteinternet.dl.sourceforge.net/project/zbarw/$ZBAR_FILENAME
