@@ -213,6 +213,14 @@ class Zaif(ExchangeBase):
         return {ccy: Decimal(json['last_price'])}
 
 
+def dictinvert(d):
+    inv = {}
+    for k, vlist in d.items():
+        for v in vlist:
+            keys = inv.setdefault(v, [])
+            keys.append(k)
+    return inv
+
 def get_exchanges_and_currencies():
     # load currencies.json from disk
     path = resource_path('currencies.json')
