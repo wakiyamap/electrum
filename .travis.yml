@@ -18,7 +18,7 @@ cache:
 script:
     - tox
 after_success:
-    - if [ "$TRAVIS_BRANCH" = "master" ]; then pip install requests && contrib/push_locale; fi
+    - pip install requests python-coveralls
     - coveralls
 jobs:
   include:

@@ -29,6 +29,9 @@ electrum_mona/gui/kivy/theming/light.atlas
 .cache/
 .coverage
 .pytest_cache
+.pyre/
+.pyre_configuration
+.watchmanconfig
 
 # build workspaces
 contrib/build-wine/tmp/
