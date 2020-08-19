@@ -2,16 +2,16 @@
 
 # Please update these carefully, some versions won't work under Wine
 NSIS_FILENAME=nsis-3.05-setup.exe
-NSIS_URL=https://prdownloads.sourceforge.net/nsis/$NSIS_FILENAME?download
+NSIS_URL=https://downloads.sourceforge.net/project/nsis/NSIS%203/3.05/$NSIS_FILENAME
 NSIS_SHA256=1a3cc9401667547b9b9327a177b13485f7c59c2303d4b6183e7bc9e6c8d6bfdb
+
+ZBAR_FILENAME=zbarw-20121031-setup.exe
+ZBAR_URL=https://downloads.sourceforge.net/project/zbarw/$ZBAR_FILENAME
+ZBAR_SHA256=177e32b272fa76528a3af486b74e9cb356707be1c5ace4ed3fcee9723e2c2c02
 
 LYRA2RE_HASH_PYTHON_URL=https://github.com/wakiyamap/lyra2re-hash-python/releases/download/1.1.2/lyra2re2_hash-1.1.2-cp37-cp37m-win32.whl
 LYRA2RE_HASH_PYTHON_FILENAME=lyra2re2_hash-1.1.2-cp37-cp37m-win32.whl
 LYRA2RE_HASH_PYTHON_SHA256=de1ce0cbccbcb779c4c9f8b0704c844c613f27ef286a5c94a55b0891528eb4cd
-
-ZBAR_FILENAME=zbarw-20121031-setup.exe
-ZBAR_URL=https://astuteinternet.dl.sourceforge.net/project/zbarw/$ZBAR_FILENAME
-ZBAR_SHA256=177e32b272fa76528a3af486b74e9cb356707be1c5ace4ed3fcee9723e2c2c02
 
 LIBUSB_REPO="https://github.com/libusb/libusb.git"
 LIBUSB_COMMIT="e782eeb2514266f6738e242cdcb18e3ae1ed06fa"
