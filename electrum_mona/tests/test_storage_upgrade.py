@@ -2,6 +2,7 @@ import shutil
 import tempfile
 import os
 import json
+from typing import Optional
 
 from electrum_mona.wallet_db import WalletDB
 from electrum_mona.wallet import Wallet
@@ -62,7 +63,7 @@ class TestStorageUpgrade(WalletTestCase):
         super().tearDownClass()
         shutil.rmtree(cls.__electrum_path)
 
-    def _upgrade_storage(self, wallet_json, accounts=1):
+    def _upgrade_storage(self, wallet_json, accounts=1) -> Optional[WalletDB]:
         if accounts == 1:
             # test manual upgrades
             db = self._load_db_from_json_string(wallet_json=wallet_json,
@@ -75,6 +76,7 @@ class TestStorageUpgrade(WalletTestCase):
             db2 = self._load_db_from_json_string(wallet_json=wallet_json,
                                                  manual_upgrades=False)
             self._sanity_check_upgraded_db(db2)
+            return db2
         else:
             db = self._load_db_from_json_string(wallet_json=wallet_json,
                                                 manual_upgrades=True)
@@ -90,6 +92,7 @@ class TestStorageUpgrade(WalletTestCase):
         self.assertFalse(db.requires_split())
         self.assertFalse(db.requires_upgrade())
         w = Wallet(db, None, config=self.config)
+        w.stop()
 
     @staticmethod
     def _load_db_from_json_string(*, wallet_json, manual_upgrades):
