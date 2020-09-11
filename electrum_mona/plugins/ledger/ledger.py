@@ -4,9 +4,9 @@ import sys
 import traceback
 from typing import Optional, Tuple
 
-from electrum_mona import constants
 from electrum_mona import ecc
 from electrum_mona import bip32
+from electrum_mona import constants
 from electrum_mona.crypto import hash_160
 from electrum_mona.bitcoin import int_to_hex, var_int, is_segwit_script_type
 from electrum_mona.bip32 import BIP32Node, convert_bip32_intpath_to_strpath
@@ -17,6 +17,7 @@ from electrum_mona.wallet import Standard_Wallet
 from electrum_mona.util import bfh, bh2u, versiontuple, UserFacingException
 from electrum_mona.base_wizard import ScriptTypeNotSupported
 from electrum_mona.logging import get_logger
+from electrum_mona.plugin import runs_in_hwd_thread
 
 from ..hw_wallet import HW_PluginBase, HardwareClientBase
 from ..hw_wallet.plugin import is_any_tx_output_on_change_branch, validate_op_return_output, LibraryFoundButUnusable
@@ -75,16 +76,14 @@ class Ledger_Client(HardwareClientBase):
     def is_pairable(self):
         return True
 
+    @runs_in_hwd_thread
     def close(self):
-        with self.device_manager().hid_lock:
-            self.dongleObject.dongle.close()
-
-    def timeout(self, cutoff):
-        pass
+        self.dongleObject.dongle.close()
 
     def is_initialized(self):
         return True
 
+    @runs_in_hwd_thread
     def get_soft_device_id(self):
         if self._soft_device_id is None:
             # modern ledger can provide xpub without user interaction
@@ -107,6 +106,7 @@ class Ledger_Client(HardwareClientBase):
             return "Ledger Nano X"
         return None
 
+    @runs_in_hwd_thread
     def has_usable_connection_with_device(self):
         try:
             self.dongleObject.getFirmwareVersion()
@@ -114,6 +114,7 @@ class Ledger_Client(HardwareClientBase):
             return False
         return True
 
+    @runs_in_hwd_thread
     @test_pin_unlocked
     def get_xpub(self, bip32_path, xtype):
         self.checkDevice()
@@ -181,6 +182,7 @@ class Ledger_Client(HardwareClientBase):
     def supports_segwit_trustedInputs(self):
         return self.segwitTrustedInputs
 
+    @runs_in_hwd_thread
     def perform_hw1_preflight(self):
         try:
             firmwareInfo = self.dongleObject.getFirmwareVersion()
@@ -226,6 +228,7 @@ class Ledger_Client(HardwareClientBase):
                                           "Please make sure that 'Browser support' is disabled on your device.")
             raise e
 
+    @runs_in_hwd_thread
     def checkDevice(self):
         if not self.preflightDone:
             try:
@@ -292,6 +295,7 @@ class Ledger_KeyStore(Hardware_KeyStore):
     def decrypt_message(self, pubkey, message, password):
         raise UserFacingException(_('Encryption and decryption are currently not supported for {}').format(self.device))
 
+    @runs_in_hwd_thread
     @test_pin_unlocked
     @set_and_unset_signing
     def sign_message(self, sequence, message, password):
@@ -338,6 +342,7 @@ class Ledger_KeyStore(Hardware_KeyStore):
         # And convert it
         return bytes([27 + 4 + (signature[0] & 0x01)]) + r + s
 
+    @runs_in_hwd_thread
     @test_pin_unlocked
     @set_and_unset_signing
     def sign_transaction(self, tx, password):
@@ -538,6 +543,7 @@ class Ledger_KeyStore(Hardware_KeyStore):
         finally:
             self.handler.finished()
 
+    @runs_in_hwd_thread
     @test_pin_unlocked
     @set_and_unset_signing
     def show_address(self, sequence, txin_type):
@@ -609,6 +615,7 @@ class LedgerPlugin(HW_PluginBase):
         else:
             raise LibraryFoundButUnusable(library_version=version)
 
+    @runs_in_hwd_thread
     def get_btchip_device(self, device):
         ledger = False
         if device.product_key[0] == 0x2581 and device.product_key[1] == 0x3b7c:
@@ -620,12 +627,12 @@ class LedgerPlugin(HW_PluginBase):
                 ledger = True
             else:
                 return None  # non-compatible interface of a Nano S or Blue
-        with self.device_manager().hid_lock:
-            dev = hid.device()
-            dev.open_path(device.path)
-            dev.set_nonblocking(True)
+        dev = hid.device()
+        dev.open_path(device.path)
+        dev.set_nonblocking(True)
         return HIDDongleHIDAPI(dev, ledger, BTCHIP_DEBUG)
 
+    @runs_in_hwd_thread
     def create_client(self, device, handler):
         if handler:
             self.handler = handler
@@ -650,6 +657,7 @@ class LedgerPlugin(HW_PluginBase):
         xpub = client.get_xpub(derivation, xtype)
         return xpub
 
+    @runs_in_hwd_thread
     def get_client(self, keystore, force_pair=True, *,
                    devices=None, allow_user_interaction=True):
         # All client interaction should not be in the main GUI thread
@@ -663,6 +671,7 @@ class LedgerPlugin(HW_PluginBase):
             client.checkDevice()
         return client
 
+    @runs_in_hwd_thread
     def show_address(self, wallet, address, keystore=None):
         if keystore is None:
             keystore = wallet.get_keystore()
