@@ -21,7 +21,7 @@ import urllib.parse
 
 import dns.resolver
 import dns.exception
-from aiorpcx import run_in_thread, TaskGroup
+from aiorpcx import run_in_thread, TaskGroup, NetAddress
 
 from . import constants, util
 from . import keystore
@@ -126,6 +126,7 @@ class LNWorker(Logger, NetworkRetryManager[LNPeerAddr]):
         self.node_keypair = generate_keypair(BIP32Node.from_xkey(xprv), LnKeyFamily.NODE_KEY)
         self._peers = {}  # type: Dict[bytes, Peer]  # pubkey -> Peer  # needs self.lock
         self.taskgroup = SilentTaskGroup()
+        self.listen_server = None  # type: Optional[asyncio.AbstractServer]
         # set some feature flags as baseline for both LNWallet and LNGossip
         # note that e.g. DATA_LOSS_PROTECT is needed for LNGossip as many peers require it
         self.features = LnFeatures(0)
@@ -149,25 +150,26 @@ class LNWorker(Logger, NetworkRetryManager[LNPeerAddr]):
         # FIXME: only one LNWorker can listen at a time (single port)
         listen_addr = self.config.get('lightning_listen')
         if listen_addr:
-            addr, port = listen_addr.rsplit(':', 2)
-            if addr[0] == '[':
-                # ipv6
-                addr = addr[1:-1]
+            self.logger.info(f'lightning_listen enabled. will try to bind: {listen_addr!r}')
+            try:
+                netaddr = NetAddress.from_string(listen_addr)
+            except Exception as e:
+                self.logger.error(f"failed to parse config key 'lightning_listen'. got: {e!r}")
+                return
+            addr = str(netaddr.host)
             async def cb(reader, writer):
                 transport = LNResponderTransport(self.node_keypair.privkey, reader, writer)
                 try:
                     node_id = await transport.handshake()
-                except:
-                    self.logger.info('handshake failure from incoming connection')
+                except Exception as e:
+                    self.logger.info(f'handshake failure from incoming connection: {e!r}')
                     return
                 peer = Peer(self, node_id, transport)
                 with self.lock:
                     self._peers[node_id] = peer
                 await self.taskgroup.spawn(peer.main_loop())
             try:
-                # FIXME: server.close(), server.wait_closed(), etc... ?
-                # TODO: onion hidden service?
-                server = await asyncio.start_server(cb, addr, int(port))
+                self.listen_server = await asyncio.start_server(cb, addr, netaddr.port)
             except OSError as e:
                 self.logger.error(f"cannot listen for lightning p2p. error: {e!r}")
 
@@ -231,6 +233,8 @@ class LNWorker(Logger, NetworkRetryManager[LNPeerAddr]):
         asyncio.run_coroutine_threadsafe(self.main_loop(), self.network.asyncio_loop)
 
     def stop(self):
+        if self.listen_server:
+            self.network.asyncio_loop.call_soon_threadsafe(self.listen_server.close)
         asyncio.run_coroutine_threadsafe(self.taskgroup.cancel_remaining(), self.network.asyncio_loop)
         util.unregister_callback(self.on_proxy_changed)
 
@@ -482,6 +486,8 @@ class LNWallet(LNWorker):
 
         self.pending_payments = defaultdict(asyncio.Future)  # type: Dict[bytes, asyncio.Future[BarePaymentAttemptLog]]
 
+        self.swap_manager = SwapManager(wallet=self.wallet, lnworker=self)
+
     @property
     def channels(self) -> Mapping[bytes, Channel]:
         """Returns a read-only copy of channels."""
@@ -541,7 +547,7 @@ class LNWallet(LNWorker):
         self.lnwatcher = LNWalletWatcher(self, network)
         self.lnwatcher.start_network(network)
         self.network = network
-        self.swap_manager = SwapManager(self.wallet, network)
+        self.swap_manager.start_network(network=network, lnwatcher=self.lnwatcher)
 
         for chan in self.channels.values():
             self.lnwatcher.add_channel(chan.funding_outpoint.to_str(), chan.get_funding_address())
@@ -638,7 +644,7 @@ class LNWallet(LNWorker):
             item = {
                 'channel_id': bh2u(chan.channel_id),
                 'type': 'channel_opening',
-                'label': self.wallet.get_label(funding_txid) or (_('Open channel') + ' ' + chan.get_id_for_log()),
+                'label': self.wallet.get_label_for_txid(funding_txid) or (_('Open channel') + ' ' + chan.get_id_for_log()),
                 'txid': funding_txid,
                 'amount_msat': chan.balance(LOCAL, ctn=0),
                 'direction': 'received',
@@ -653,7 +659,7 @@ class LNWallet(LNWorker):
             item = {
                 'channel_id': bh2u(chan.channel_id),
                 'txid': closing_txid,
-                'label': self.wallet.get_label(closing_txid) or (_('Close channel') + ' ' + chan.get_id_for_log()),
+                'label': self.wallet.get_label_for_txid(closing_txid) or (_('Close channel') + ' ' + chan.get_id_for_log()),
                 'type': 'channel_closure',
                 'amount_msat': -chan.balance_minus_outgoing_htlcs(LOCAL),
                 'direction': 'sent',
@@ -663,7 +669,7 @@ class LNWallet(LNWorker):
             out[closing_txid] = item
         # add info about submarine swaps
         settled_payments = self.get_settled_payments()
-        current_height = self.network.get_local_height()
+        current_height = self.wallet.get_local_height()
         for payment_hash_hex, swap in self.swap_manager.swaps.items():
             txid = swap.spending_txid if swap.is_reverse else swap.funding_txid
             if txid is None:
@@ -684,7 +690,7 @@ class LNWallet(LNWorker):
                 'amount_msat': 0,
                 #'amount_msat': amount_msat, # must not be added
                 'type': 'swap',
-                'label': self.wallet.get_label(txid) or label,
+                'label': self.wallet.get_label_for_txid(txid) or label,
             }
         return out
 
@@ -855,10 +861,10 @@ class LNWallet(LNWorker):
                 # note: path-finding runs in a separate thread so that we don't block the asyncio loop
                 # graph updates might occur during the computation
                 self.set_invoice_status(key, PR_ROUTING)
-                util.trigger_callback('invoice_status', key)
+                util.trigger_callback('invoice_status', self.wallet, key)
                 route = await run_in_thread(partial(self._create_route_from_invoice, lnaddr, full_path=full_path))
                 self.set_invoice_status(key, PR_INFLIGHT)
-                util.trigger_callback('invoice_status', key)
+                util.trigger_callback('invoice_status', self.wallet, key)
                 payment_attempt_log = await self._pay_to_route(route, lnaddr)
             except Exception as e:
                 log.append(PaymentAttemptLog(success=False, exception=e))
@@ -871,7 +877,7 @@ class LNWallet(LNWorker):
                 break
         else:
             reason = _('Failed after {} attempts').format(attempts)
-        util.trigger_callback('invoice_status', key)
+        util.trigger_callback('invoice_status', self.wallet, key)
         if success:
             util.trigger_callback('payment_succeeded', self.wallet, key)
         else:
@@ -1211,7 +1217,7 @@ class LNWallet(LNWorker):
         else:
             chan.logger.info('received unexpected payment_failed, probably from previous session')
             key = payment_hash.hex()
-            util.trigger_callback('invoice_status', key)
+            util.trigger_callback('invoice_status', self.wallet, key)
             util.trigger_callback('payment_failed', self.wallet, key, '')
         util.trigger_callback('ln_payment_failed', payment_hash, chan.channel_id)
 
@@ -1227,13 +1233,13 @@ class LNWallet(LNWorker):
         else:
             chan.logger.info('received unexpected payment_sent, probably from previous session')
             key = payment_hash.hex()
-            util.trigger_callback('invoice_status', key)
+            util.trigger_callback('invoice_status', self.wallet, key)
             util.trigger_callback('payment_succeeded', self.wallet, key)
         util.trigger_callback('ln_payment_completed', payment_hash, chan.channel_id)
 
     def payment_received(self, chan, payment_hash: bytes):
         self.set_payment_status(payment_hash, PR_PAID)
-        util.trigger_callback('request_status', payment_hash.hex(), PR_PAID)
+        util.trigger_callback('request_status', self.wallet, payment_hash.hex(), PR_PAID)
         util.trigger_callback('ln_payment_completed', payment_hash, chan.channel_id)
 
     async def _calc_routing_hints_for_invoice(self, amount_sat: Optional[int]):

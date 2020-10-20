@@ -15,11 +15,6 @@ PYHOME = 'c:/python3'
 
 home = 'C:\\electrum-mona\\'
 
-if os.path.exists("C:/Program Files (x86)"):
-    zbardir = 'C:\\Program Files (x86)\\'
-else:
-    zbardir = 'C:\\Program Files\\'
-
 # see https://github.com/pyinstaller/pyinstaller/issues/2005
 hiddenimports = []
 hiddenimports += collect_submodules('pkg_resources')  # workaround for https://github.com/pypa/setuptools/issues/1963
@@ -43,6 +38,7 @@ binaries += [('C:/tmp/libgcc_s_dw2-1.dll', '.')]
 
 binaries += [('C:/tmp/libsecp256k1-0.dll', '.')]
 binaries += [('C:/tmp/libusb-1.0.dll', '.')]
+binaries += [('C:/tmp/libzbar-0.dll', '.')]
 
 datas = [
     (home+'electrum_mona/*.json', 'electrum_mona'),
@@ -50,7 +46,6 @@ datas = [
     (home+'electrum_mona/wordlist/english.txt', 'electrum_mona/wordlist'),
     (home+'electrum_mona/locale', 'electrum_mona/locale'),
     (home+'electrum_mona/plugins', 'electrum_mona/plugins'),
-    (zbardir+'ZBar\\bin\\', '.'),
     (home+'electrum_mona/gui/icons', 'electrum_mona/gui/icons'),
 ]
 datas += collect_data_files('trezorlib')
@@ -149,7 +144,7 @@ exe_portable = EXE(
 #####
 # exe and separate files that NSIS uses to build installer "setup" exe
 
-exe_dependent = EXE(
+exe_inside_setup_noconsole = EXE(
     pyz,
     a.scripts,
     exclude_binaries=True,
@@ -160,8 +155,20 @@ exe_dependent = EXE(
     icon=home+'electrum_mona/gui/icons/electrum.ico',
     console=False)
 
+exe_inside_setup_console = EXE(
+    pyz,
+    a.scripts,
+    exclude_binaries=True,
+    name=os.path.join('build\\pyi.win32\\electrum', cmdline_name+"-debug"),
+    debug=False,
+    strip=None,
+    upx=False,
+    icon=home+'electrum_mona/gui/icons/electrum.ico',
+    console=True)
+
 coll = COLLECT(
-    exe_dependent,
+    exe_inside_setup_noconsole,
+    exe_inside_setup_console,
     a.binaries,
     a.zipfiles,
     a.datas,
