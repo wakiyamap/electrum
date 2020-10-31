@@ -70,7 +70,7 @@ You probably need to clear the cache: `rm -rf .buildozer/android/platform/build-
 Assuming `adb` is installed:
 ```
 $ adb -d install -r bin/Electrum-*-arm64-v8a-debug.apk
-$ adb shell monkey -p org.electrum-mona.electrum-mona 1
+$ adb shell monkey -p org.electrum-mona.electrum_mona 1
 ```
 
 
@@ -95,7 +95,7 @@ adb logcat | grep python
 ```
 Better `grep` but fragile because of `cut`:
 ```
-adb logcat | grep -F "`adb shell ps | grep org.electrum-mona.electrum-mona | cut -c14-19`"
+adb logcat | grep -F "`adb shell ps | grep org.electrum-mona.electrum_mona | cut -c14-19`"
 ```
 
 
@@ -122,6 +122,6 @@ of Android does not let you access the internal storage of an app without root.
 (See [this](https://stackoverflow.com/q/9017073))
 ```
 $ adb shell
-$ run-as org.electrum-mona.electrum-mona ls /data/data/org.electrum-mona.electrum-mona/files/data
-$ run-as org.electrum-mona.electrum-mona cp /data/data/org.electrum-mona.electrum-mona/files/data/wallets/my_wallet /sdcard/some_path/my_wallet
+$ run-as org.electrum-mona.electrum_mona ls /data/data/org.electrum-mona.electrum_mona/files/data
+$ run-as org.electrum-mona.electrum_mona cp /data/data/org.electrum-mona.electrum_mona/files/data/wallets/my_wallet /sdcard/some_path/my_wallet
 ```

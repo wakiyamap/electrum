@@ -236,7 +236,7 @@ def configure_logging(config):
     is_android = 'ANDROID_DATA' in os.environ
     if is_android:
         from jnius import autoclass
-        build_config = autoclass("org.electrum-mona.electrum-mona.BuildConfig")
+        build_config = autoclass("org.electrum-mona.electrum_mona.BuildConfig")
         log_to_file |= bool(build_config.DEBUG)
     if log_to_file:
         log_directory = pathlib.Path(config.path) / "logs"
