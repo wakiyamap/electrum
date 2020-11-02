@@ -411,7 +411,7 @@ def android_ext_dir():
     return primary_external_storage_path()
 
 def android_backup_dir():
-    d = os.path.join(android_ext_dir(), 'org.monacoin.electrum')
+    d = os.path.join(android_ext_dir(), 'org.electrum-mona.electrum_mona')
     if not os.path.exists(d):
         os.mkdir(d)
     return d
