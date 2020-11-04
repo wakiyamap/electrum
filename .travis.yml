@@ -1,3 +1,10 @@
+dist: bionic
+git:
+  depth: false
+cache:
+  - pip: true
+  - directories:
+    - /tmp/electrum-build
 jobs:
   include:
     - stage: binary builds
