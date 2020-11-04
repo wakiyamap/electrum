@@ -35,8 +35,7 @@ jobs:
         pip install coveralls
         coveralls
       env:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        parallel-finished: true
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   flake8:
     runs-on: ubuntu-latest
