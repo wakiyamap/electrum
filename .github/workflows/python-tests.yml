@@ -10,8 +10,35 @@ on:
     branches: [ master ]
 
 jobs:
-  build:
 
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.6, 3.7, 3.8]
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        sudo apt-get -y install libsecp256k1-0
+        pip install -r contrib/requirements/requirements-travis.txt
+    - name: pytest with tox
+      run: |
+        tox -e py
+    - name: Coveralls
+      run: |
+        pip install coveralls
+        coveralls
+      env:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        parallel-finished: true
+
+  flake8:
     runs-on: ubuntu-latest
     strategy:
       matrix:
