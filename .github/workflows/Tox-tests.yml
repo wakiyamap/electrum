@@ -30,7 +30,9 @@ jobs:
     - name: pytest with tox
       run: |
         tox -e py
-    - name: Result of coveralls
+    - name: Coveralls
       run: |
         pip install coveralls
         coveralls
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
