@@ -17,12 +17,6 @@
         "t": "50001",
         "version": "1.4"
     },
-    "electrum-mona.nope.work": {
-        "pruning": "-",
-        "s": "50002",
-        "t": "50001",
-        "version": "1.4"
-    },
     "electrum.miningbeaver.ga": {
         "pruning": "-",
         "s": "50002",
