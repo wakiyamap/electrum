@@ -9,7 +9,9 @@ Electrum-mona - Lightweight Monacoin client
   Language: Python (>= 3.6)
   Homepage: https://electrum-mona.org/
 
-
+.. image:: https://github.com/wakiyamap/electrum-mona/workflows/Tests/badge.svg?branch=master
+    :target: https://github.com/wakiyamap/electrum-mona/actions?query=workflow%3ATests
+    :alt: Test Status
 .. image:: https://travis-ci.org/wakiyamap/electrum-mona.svg?branch=master
     :target: https://travis-ci.org/wakiyamap/electrum-mona
     :alt: Build Status
