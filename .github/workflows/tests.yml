@@ -34,10 +34,6 @@ jobs:
         coveralls
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - name: after_success_test
-      if: github.ref == 'refs/heads/master'
-      run: |
-        pip install requests
 
   flake8:
     runs-on: ubuntu-latest
