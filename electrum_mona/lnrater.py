@@ -11,8 +11,8 @@ from pprint import pformat
 from random import choices
 from statistics import mean, median, stdev
 from typing import TYPE_CHECKING, Dict, NamedTuple, Tuple, List
-import time
 import sys
+import time
 
 if sys.version_info[:2] >= (3, 7):
     from asyncio import get_running_loop
