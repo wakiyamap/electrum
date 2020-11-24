@@ -155,11 +155,11 @@ class ExchangeBase(Logger):
 
 class Bittrex(ExchangeBase):
     async def get_rates(self, ccy):
-        json1 = await self.get_json('bittrex.com', '/api/v1.1/public/getticker?market=btc-mona')
+        json1 = await self.get_json('api.bittrex.com', '/v3/markets/MONA-BTC/ticker')
         if ccy != "BTC":
-            json2 = await self.get_json('apiv2.bitcoinaverage.com', '/indices/global/ticker/BTC%s' % ccy)
-            return {ccy: Decimal(json1['result']['Last'])*Decimal(json2['last'])}
-        return {ccy: Decimal(json1['result']['Last'])}
+            json2 = await self.get_json('api.coingecko.com', '/api/v3/simple/price?ids=bitcoin&vs_currencies=%s' % ccy)
+            return {ccy: Decimal(json1['lastTradeRate'])*Decimal(json2['bitcoin'][ccy.lower()])}
+        return {ccy: Decimal(json1['lastTradeRate'])}
 
 class Bitbank(ExchangeBase):
     async def get_rates(self, ccy):
