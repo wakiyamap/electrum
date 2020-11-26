@@ -51,8 +51,11 @@ jobs:
       install:
         - git fetch --all --tags
       script:
-        - while sleep 9m; do echo "=====[ $SECONDS seconds still running ]====="; done &
+        # Output something every minute or Travis kills the job
+        - while sleep 60; do echo "=====[ $SECONDS seconds still running ]====="; done &
         - ./contrib/osx/make_osx
+        # kill background sleep loop
+        - kill %1
       after_script: ls -lah dist && md5 dist/*
       after_success: true
     - if: (branch = master) OR (tag IS present)
