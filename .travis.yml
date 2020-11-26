@@ -56,6 +56,9 @@ jobs:
         - ./contrib/osx/make_osx
         # kill background sleep loop
         - kill %1
+      cache:
+        directories:
+          - $HOME/.cache/pip
       after_script: ls -lah dist && md5 dist/*
       after_success: true
     - if: (branch = master) OR (tag IS present)
