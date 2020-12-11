@@ -46,7 +46,7 @@ from PyQt5.QtWidgets import (QMessageBox, QComboBox, QSystemTrayIcon, QTabWidget
                              QHBoxLayout, QPushButton, QScrollArea, QTextEdit,
                              QShortcut, QMainWindow, QCompleter, QInputDialog,
                              QWidget, QSizePolicy, QStatusBar, QToolTip, QDialog,
-                             QMenu, QAction, QStackedWidget)
+                             QMenu, QAction, QStackedWidget, QToolButton)
 
 import electrum_mona
 from electrum_mona import (keystore, ecc, constants, util, bitcoin, commands,
@@ -104,11 +104,16 @@ if TYPE_CHECKING:
 
 LN_NUM_PAYMENT_ATTEMPTS = 10
 
-class StatusBarButton(QPushButton):
+
+class StatusBarButton(QToolButton):
+    # note: this class has a custom stylesheet applied in stylesheet_patcher.py
     def __init__(self, icon, tooltip, func):
-        QPushButton.__init__(self, icon, '')
+        QToolButton.__init__(self)
+        self.setText('')
+        self.setIcon(icon)
         self.setToolTip(tooltip)
-        self.setFlat(True)
+        self.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.setAutoRaise(True)
         self.setMaximumWidth(25)
         self.clicked.connect(self.onPress)
         self.func = func
@@ -188,6 +193,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         self.pluginsdialog = None
         self.showing_cert_mismatch_error = False
         self.tl_windows = []
+        self.pending_invoice = None
         Logger.__init__(self)
 
         self.tx_notification_queue = queue.Queue()
@@ -1526,12 +1532,11 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         msg = _("Pay lightning invoice?") + '\n\n' + _("This will send {}?").format(self.format_amount_and_units(amount_sat))
         if not self.question(msg):
             return
+        self.save_pending_invoice()
         attempts = LN_NUM_PAYMENT_ATTEMPTS
         def task():
             self.wallet.lnworker.pay(invoice, amount_msat=amount_msat, attempts=attempts)
-        self.do_clear()
         self.wallet.thread.add(task)
-        self.invoice_list.update()
 
     def on_request_status(self, wallet, key, status):
         if wallet != self.wallet:
@@ -1589,21 +1594,24 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
                 URI=self.payto_URI)
 
     def do_save_invoice(self):
-        invoice = self.read_invoice()
-        if not invoice:
+        self.pending_invoice = self.read_invoice()
+        if not self.pending_invoice:
             return
-        self.wallet.save_invoice(invoice)
+        self.save_pending_invoice()
+
+    def save_pending_invoice(self):
+        if not self.pending_invoice:
+            return
         self.do_clear()
+        self.wallet.save_invoice(self.pending_invoice)
         self.invoice_list.update()
+        self.pending_invoice = None
 
     def do_pay(self):
-        invoice = self.read_invoice()
-        if not invoice:
+        self.pending_invoice = self.read_invoice()
+        if not self.pending_invoice:
             return
-        self.wallet.save_invoice(invoice)
-        self.invoice_list.update()
-        self.do_clear()
-        self.do_pay_invoice(invoice)
+        self.do_pay_invoice(self.pending_invoice)
 
     def pay_multiple_invoices(self, invoices):
         outputs = []
@@ -1635,9 +1643,10 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         """
         return self.utxo_list.get_spend_list()
 
-    def pay_onchain_dialog(self, inputs: Sequence[PartialTxInput],
-                           outputs: List[PartialTxOutput], *,
-                           external_keypairs=None) -> None:
+    def pay_onchain_dialog(
+            self, inputs: Sequence[PartialTxInput],
+            outputs: List[PartialTxOutput], *,
+            external_keypairs=None) -> None:
         # trustedcoin requires this
         if run_hook('abort_send', self):
             return
@@ -1671,6 +1680,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         if cancelled:
             return
         if is_send:
+            self.save_pending_invoice()
             def sign_done(success):
                 if success:
                     self.broadcast_or_show(tx)
@@ -1770,7 +1780,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         try:
             extract_nodeid(connect_str)
         except ConnStringFormatError as e:
-            self.main_window.show_error(str(e))
+            self.show_error(str(e))
             return
         # use ConfirmTxDialog
         # we need to know the fee before we broadcast, because the txid is required
@@ -2235,7 +2245,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
             self.lightning_button.setText('')
             self.lightning_button.setToolTip(_("The Lightning Network graph is fully synced."))
         else:
-            self.lightning_button.setMaximumWidth(25 + 4 * char_width_in_lineedit())
+            self.lightning_button.setMaximumWidth(25 + 5 * char_width_in_lineedit())
             self.lightning_button.setText(progress_str)
             self.lightning_button.setToolTip(_("The Lightning Network graph is syncing...\n"
                                                "Payments are more likely to succeed with a more complete graph."))

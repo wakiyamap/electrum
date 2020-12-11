@@ -220,6 +220,14 @@ class Zaif(ExchangeBase):
         return {ccy: Decimal(json['last_price'])}
 
 
+class Walltime(ExchangeBase):
+
+    async def get_rates(self, ccy):
+        json = await self.get_json('s3.amazonaws.com', 
+                             '/data-production-walltime-info/production/dynamic/walltime-info.json')
+        return {'BRL': Decimal(json['BRL_XBT']['last_inexact'])}
+
+
 def dictinvert(d):
     inv = {}
     for k, vlist in d.items():

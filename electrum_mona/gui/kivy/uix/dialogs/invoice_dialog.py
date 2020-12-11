@@ -98,7 +98,7 @@ class InvoiceDialog(Factory.Popup):
         self.description = invoice.message
         self.is_lightning = invoice.is_lightning()
         self.update_status()
-        self.log = self.app.wallet.lnworker.logs[self.key] if self.is_lightning else []
+        self.log = self.app.wallet.lnworker.logs[self.key] if self.is_lightning and self.app.wallet.lnworker else []
 
     def update_status(self):
         invoice = self.app.wallet.get_invoice(self.key)
@@ -131,8 +131,8 @@ class InvoiceDialog(Factory.Popup):
         from .question import Question
         def cb(result):
             if result:
-                self.app.wallet.delete_invoice(self.key)
                 self.dismiss()
+                self.app.wallet.delete_invoice(self.key)
                 self.app.send_screen.update()
         d = Question(_('Delete invoice?'), cb)
         d.open()

@@ -9,6 +9,7 @@ from electrum_mona.util import bh2u
 from electrum_mona.bitcoin import COIN
 import electrum_mona.simple_config as config
 from electrum_mona.logging import Logger
+from electrum_mona.lnutil import ln_dummy_address
 
 from .label_dialog import LabelDialog
 
@@ -23,6 +24,7 @@ Builder.load_string('''
     title: _('Open Lightning Channel')
     pubkey: ''
     amount: ''
+    is_max: False
     ipport: ''
     BoxLayout
         spacing: '12dp'
@@ -154,19 +156,28 @@ class LightningOpenChannelDialog(Factory.Popup, Logger):
         conn_str = self.pubkey
         if self.ipport:
             conn_str += '@' + self.ipport.strip()
-        amount = self.app.get_amount(self.amount)
+        amount = '!' if self.is_max else self.app.get_amount(self.amount)
         self.app.protected('Create a new channel?', self.do_open_channel, (conn_str, amount))
         self.dismiss()
 
     def do_open_channel(self, conn_str, amount, password):
         coins = self.app.wallet.get_spendable_coins(None, nonlocal_only=True)
-        funding_tx = self.app.wallet.lnworker.mktx_for_open_channel(coins=coins, funding_sat=amount)
+        lnworker = self.app.wallet.lnworker
         try:
-            chan, funding_tx = self.app.wallet.lnworker.open_channel(connect_str=conn_str,
-                                                                     funding_tx=funding_tx,
-                                                                     funding_sat=amount,
-                                                                     push_amt_sat=0,
-                                                                     password=password)
+            funding_tx = lnworker.mktx_for_open_channel(coins=coins, funding_sat=amount)
+        except Exception as e:
+            self.logger.exception("Problem opening channel")
+            self.app.show_error(_('Problem opening channel: ') + '\n' + repr(e))
+            return
+        # read funding_sat from tx; converts '!' to int value
+        funding_sat = funding_tx.output_value_for_address(ln_dummy_address())
+        try:
+            chan, funding_tx = lnworker.open_channel(
+                connect_str=conn_str,
+                funding_tx=funding_tx,
+                funding_sat=funding_sat,
+                push_amt_sat=0,
+                password=password)
         except Exception as e:
             self.logger.exception("Problem opening channel")
             self.app.show_error(_('Problem opening channel: ') + '\n' + repr(e))

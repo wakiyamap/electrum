@@ -249,7 +249,7 @@ class BaseWizard(Logger):
                 self.data['addresses'][addr] = {'type':txin_type, 'pubkey':pubkey}
             self.keystores.append(k)
         else:
-            return self.terminate()
+            return self.terminate(aborted=True)
         return self.run('create_wallet')
 
     def restore_from_key(self):
@@ -707,7 +707,7 @@ class BaseWizard(Logger):
     def create_seed(self, seed_type):
         from . import mnemonic
         self.seed_type = seed_type
-        seed = mnemonic.Mnemonic('en').make_seed(self.seed_type)
+        seed = mnemonic.Mnemonic('en').make_seed(seed_type=self.seed_type)
         self.opt_bip39 = False
         f = lambda x: self.request_passphrase(seed, x)
         self.show_seed_dialog(run_next=f, seed_text=seed)
@@ -721,7 +721,7 @@ class BaseWizard(Logger):
 
     def confirm_seed(self, seed, passphrase):
         f = lambda x: self.confirm_passphrase(seed, passphrase)
-        self.confirm_seed_dialog(run_next=f, test=lambda x: x==seed)
+        self.confirm_seed_dialog(run_next=f, seed=seed if self.config.get('debug_seed') else '', test=lambda x: x==seed)
 
     def confirm_passphrase(self, seed, passphrase):
         f = lambda x: self.run('create_keystore', seed, x)

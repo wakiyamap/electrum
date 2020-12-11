@@ -192,40 +192,28 @@ class ElectrumWindow(App, Logger):
     def on_use_unconfirmed(self, instance, x):
         self.electrum_config.set_key('confirmed_only', not self.use_unconfirmed, True)
 
+    def switch_to_send_screen(func):
+        # try until send_screen is available
+        def wrapper(self, *args):
+            f = lambda dt: (bool(func(self, *args) and False) if self.send_screen else bool(self.switch_to('send') or True)) if self.wallet else True
+            Clock.schedule_interval(f, 0.1)
+        return wrapper
+
+    @switch_to_send_screen
     def set_URI(self, uri):
-        self.switch_to('send')
         self.send_screen.set_URI(uri)
 
+    @switch_to_send_screen
     def set_ln_invoice(self, invoice):
-        self.switch_to('send')
         self.send_screen.set_ln_invoice(invoice)
 
     def on_new_intent(self, intent):
         data = str(intent.getDataString())
-        if str(intent.getScheme()).lower() in ('bitcoin', 'lightning'):
-            self._process_invoice_str(data)
-
-    _invoice_intent_queued = None  # type: Optional[str]
-    def _process_invoice_str(self, invoice: str) -> None:
-        if not self.wallet:
-            self._invoice_intent_queued = invoice
-            return
-        if not self.send_screen:
-            self.switch_to('send')
-            self._invoice_intent_queued = invoice
-            return
-        if invoice.lower().startswith('bitcoin:'):
-            self.set_URI(invoice)
-        elif invoice.lower().startswith('lightning:'):
-            self.set_ln_invoice(invoice)
-
-    def _maybe_process_queued_invoice(self, *dt):
-        if not self.wallet:
-            return
-        invoice_queued = self._invoice_intent_queued
-        if invoice_queued:
-            self._invoice_intent_queued = None
-            self._process_invoice_str(invoice_queued)
+        scheme = str(intent.getScheme()).lower()
+        if scheme == 'bitcoin':
+            self.set_URI(data)
+        elif scheme == 'lightning':
+            self.set_ln_invoice(data)
 
     def on_language(self, instance, language):
         self.logger.info('language: {}'.format(language))
@@ -398,7 +386,6 @@ class ElectrumWindow(App, Logger):
         self._trigger_update_interfaces = Clock.create_trigger(self.update_interfaces, .5)
 
         self._periodic_update_status_during_sync = Clock.schedule_interval(self.update_wallet_synchronizing_progress, .5)
-        self._periodic_process_queued_invoice = Clock.schedule_interval(self._maybe_process_queued_invoice, .5)
 
         # cached dialogs
         self._settings_dialog = None
@@ -462,8 +449,8 @@ class ElectrumWindow(App, Logger):
 
     @profiler
     def update_tabs(self):
-        for tab in ['invoices', 'send', 'history', 'receive', 'address']:
-            self.update_tab(tab)
+        for name in ['send', 'history', 'receive']:
+            self.update_tab(name)
 
     def switch_to(self, name):
         s = getattr(self, name + '_screen', None)
@@ -572,7 +559,6 @@ class ElectrumWindow(App, Logger):
         import time
         self.logger.info('Time to on_start: {} <<<<<<<<'.format(time.process_time()))
         Window.bind(size=self.on_size, on_keyboard=self.on_keyboard)
-        Window.bind(on_key_down=self.on_key_down)
         #Window.softinput_mode = 'below_target'
         self.on_size(Window, Window.size)
         self.init_ui()
@@ -632,65 +618,37 @@ class ElectrumWindow(App, Logger):
         else:
             return ''
 
-    def on_wizard_complete(self, wizard, storage, db):
+    def on_wizard_success(self, storage, db, password):
         if storage:
+            self.password = password
             wallet = Wallet(db, storage, config=self.electrum_config)
             wallet.start_network(self.daemon.network)
             self.daemon.add_wallet(wallet)
             self.load_wallet(wallet)
-        elif not self.wallet:
-            # wizard did not return a wallet; and there is no wallet open atm
-            # try to open last saved wallet (potentially start wizard again)
-            self.load_wallet_by_name(self.electrum_config.get_wallet_path(use_gui_last_wallet=True),
-                                     ask_if_wizard=True)
 
-    def _on_decrypted_storage(self, storage: WalletStorage):
-        assert storage.is_past_initial_decryption()
-        db = WalletDB(storage.read(), manual_upgrades=False)
-        if db.requires_upgrade():
-            wizard = Factory.InstallWizard(self.electrum_config, self.plugins)
-            wizard.path = storage.path
-            wizard.bind(on_wizard_complete=self.on_wizard_complete)
-            wizard.upgrade_storage(storage, db)
-        else:
-            self.on_wizard_complete(None, storage, db)
+    def on_wizard_aborted(self):
+        # wizard did not return a wallet; and there is no wallet open atm
+        if not self.wallet:
+            self.stop()
 
-    def load_wallet_by_name(self, path, ask_if_wizard=False):
+    def load_wallet_by_name(self, path):
         if not path:
             return
         if self.wallet and self.wallet.storage.path == path:
             return
-        else:
-            def launch_wizard():
-                d = OpenWalletDialog(self, path, self.on_open_wallet)
-                d.open()
-            if not ask_if_wizard:
-                launch_wizard()
-            else:
-                def handle_answer(b: bool):
-                    if b:
-                        launch_wizard()
-                    else:
-                        try: os.unlink(path)
-                        except FileNotFoundError: pass
-                        self.stop()
-                d = Question(_('Do you want to launch the wizard again?'), handle_answer)
-                d.open()
+        d = OpenWalletDialog(self, path, self.on_open_wallet)
+        d.open()
 
-    def on_open_wallet(self, pw, storage):
+    def on_open_wallet(self, password, storage):
         if not storage.file_exists():
-            wizard = Factory.InstallWizard(self.electrum_config, self.plugins)
+            wizard = InstallWizard(self.electrum_config, self.plugins)
             wizard.path = storage.path
-            wizard.bind(on_wizard_complete=self.on_wizard_complete)
             wizard.run('new')
         else:
-            try:
-                storage.decrypt(pw)
-            except StorageReadWriteError:
-                app.show_error(_("R/W error accessing path"))
-                return
-            self.password = pw
-            self._on_decrypted_storage(storage)
+            assert storage.is_past_initial_decryption()
+            db = WalletDB(storage.read(), manual_upgrades=False)
+            assert not db.requires_upgrade()
+            self.on_wizard_success(storage, db, password)
 
     def on_stop(self):
         self.logger.info('on_stop')
@@ -700,25 +658,6 @@ class ElectrumWindow(App, Logger):
         if self.wallet:
             self.daemon.stop_wallet(self.wallet.storage.path)
             self.wallet = None
-
-    def on_key_down(self, instance, key, keycode, codepoint, modifiers):
-        if 'ctrl' in modifiers:
-            # q=24 w=25
-            if keycode in (24, 25):
-                self.stop()
-            elif keycode == 27:
-                # r=27
-                # force update wallet
-                self.update_wallet()
-            elif keycode == 112:
-                # pageup
-                #TODO move to next tab
-                pass
-            elif keycode == 117:
-                # pagedown
-                #TODO move to prev tab
-                pass
-        #TODO: alt+tab_number to activate the particular tab
 
     def on_keyboard(self, instance, key, keycode, codepoint, modifiers):
         if key == 27 and self.is_exit is False:
@@ -824,12 +763,8 @@ class ElectrumWindow(App, Logger):
         self.root.manager = self.root.ids['manager']
 
         self.history_screen = None
-        self.contacts_screen = None
         self.send_screen = None
-        self.invoices_screen = None
         self.receive_screen = None
-        self.requests_screen = None
-        self.address_screen = None
         self.icon = "electrum_mona/gui/icons/electrum.png"
         self.tabs = self.root.ids['tabs']
 
@@ -1173,7 +1108,13 @@ class ElectrumWindow(App, Logger):
             amount, u = str(amount).split()
             assert u == self.base_unit
         def cb(amount):
-            screen.amount = amount
+            if amount == '!':
+                screen.is_max = True
+                max_amt = self.get_max_amount()
+                screen.amount = (max_amt + ' ' + self.base_unit) if max_amt else ''
+            else:
+                screen.amount = amount
+                screen.is_max = False
         popup = AmountDialog(show_max, amount, cb)
         popup.open()
 
@@ -1232,7 +1173,7 @@ class ElectrumWindow(App, Logger):
             try:
                 self.wallet.check_password(pw)
             except InvalidPassword:
-                self.show_error("Invalid PIN")
+                self.show_error("Invalid password")
                 return
         self.stop_wallet()
         os.unlink(wallet_path)

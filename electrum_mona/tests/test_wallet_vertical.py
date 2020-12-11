@@ -1398,9 +1398,6 @@ class TestWalletSending(TestCaseForTestnet):
 
         class NetworkMock:
             relay_fee = 1000
-            def run_from_another_thread(self, coro):
-                loop = asyncio.get_event_loop()
-                return loop.run_until_complete(coro)
             async def listunspent_for_scripthash(self, scripthash):
                 if scripthash == '460e4fb540b657d775d84ff4955c9b13bd954c2adc26a6b998331343f85b6a45':
                     return [{'tx_hash': 'ac24de8b58e826f60bd7b9ba31670bdfc3e8aedb2f28d0e91599d741569e3429', 'tx_pos': 1, 'height': 1325785, 'value': 1000000}]
@@ -1415,7 +1412,9 @@ class TestWalletSending(TestCaseForTestnet):
         privkeys = ['93NQ7CFbwTPyKDJLXe97jczw33fiLijam2SCZL3Uinz1NSbHrTu', ]
         network = NetworkMock()
         dest_addr = 'tmona1qtuynwzd0d6wptvyqmc6ehkm70zcamxpstvxpnz'
-        tx = sweep(privkeys, network=network, config=self.config, to_address=dest_addr, fee=5000, locktime=1325785, tx_version=1)
+        sweep_coro = sweep(privkeys, network=network, config=self.config, to_address=dest_addr, fee=5000, locktime=1325785, tx_version=1)
+        loop = asyncio.get_event_loop()
+        tx = loop.run_until_complete(sweep_coro)
 
         tx_copy = tx_from_any(tx.serialize())
         self.assertEqual('010000000129349e5641d79915e9d0282fdbaee8c3df0b6731bab9d70bf626e8588bde24ac01000000484730440220631ba847b49184781ad0162b9c3ea777abe436b361dabbf7032a81f62e80d5c202200ee882e8c45e89d71bee47f81a2b0b32085137502fec7d019684a708af8ff7f501feffffff01b82e0f00000000001600145f093709af6e9c15b080de359bdb7e78b1dd9830d93a1400',
