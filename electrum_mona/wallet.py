@@ -719,16 +719,18 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
             exp = URI.get('exp')
         timestamp = timestamp or int(time.time())
         exp = exp or 0
+        _id = bh2u(sha256d(repr(outputs) + "%d"%timestamp))[0:10]
         invoice = OnchainInvoice(
             type=PR_TYPE_ONCHAIN,
             amount_sat=amount,
             outputs=outputs,
             message=message,
-            id=bh2u(sha256(repr(outputs))[0:16]),
+            id=_id,
             time=timestamp,
             exp=exp,
             bip70=None,
             requestor=None,
+            height=self.get_local_height(),
         )
         return invoice
 
@@ -824,8 +826,13 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
             for invoice_scriptpubkey, invoice_amt in invoice_amounts.items():
                 scripthash = bitcoin.script_to_scripthash(invoice_scriptpubkey.hex())
                 prevouts_and_values = self.db.get_prevouts_by_scripthash(scripthash)
-                relevant_txs += [prevout.txid.hex() for prevout, v in prevouts_and_values]
-                total_received = sum([v for prevout, v in prevouts_and_values])
+                total_received = 0
+                for prevout, v in prevouts_and_values:
+                    height = self.get_tx_height(prevout.txid.hex()).height
+                    if height > 0 and height <= invoice.height:
+                        continue
+                    total_received += v
+                    relevant_txs.append(prevout.txid.hex())
                 # check that there is at least one TXO, and that they pay enough.
                 # note: "at least one TXO" check is needed for zero amount invoice (e.g. OP_RETURN)
                 if len(prevouts_and_values) == 0:
@@ -1550,11 +1557,11 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         return tx_new
 
     @abstractmethod
-    def _add_input_sig_info(self, txin: PartialTxInput, address: str, *, only_der_suffix: bool = True) -> None:
+    def _add_input_sig_info(self, txin: PartialTxInput, address: str, *, only_der_suffix: bool) -> None:
         pass
 
     def _add_txinout_derivation_info(self, txinout: Union[PartialTxInput, PartialTxOutput],
-                                     address: str, *, only_der_suffix: bool = True) -> None:
+                                     address: str, *, only_der_suffix: bool) -> None:
         pass  # implemented by subclasses
 
     def _add_input_utxo_info(self, txin: PartialTxInput, address: str) -> None:
@@ -1571,7 +1578,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         """
         return False  # implemented by subclasses
 
-    def add_input_info(self, txin: PartialTxInput, *, only_der_suffix: bool = True) -> None:
+    def add_input_info(self, txin: PartialTxInput, *, only_der_suffix: bool = False) -> None:
         address = self.get_txin_address(txin)
         if not self.is_mine(address):
             is_mine = self._learn_derivation_path_for_address_from_txinout(txin, address)
@@ -1631,7 +1638,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
                 tx = Transaction(raw_tx)
         return tx
 
-    def add_output_info(self, txout: PartialTxOutput, *, only_der_suffix: bool = True) -> None:
+    def add_output_info(self, txout: PartialTxOutput, *, only_der_suffix: bool = False) -> None:
         address = txout.address
         if not self.is_mine(address):
             is_mine = self._learn_derivation_path_for_address_from_txinout(txout, address)
@@ -1664,7 +1671,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         # add info to a temporary tx copy; including xpubs
         # and full derivation paths as hw keystores might want them
         tmp_tx = copy.deepcopy(tx)
-        tmp_tx.add_info_from_wallet(self, include_xpubs_and_full_paths=True)
+        tmp_tx.add_info_from_wallet(self, include_xpubs=True)
         # sign. start with ready keystores.
         for k in sorted(self.get_keystores(), key=lambda ks: ks.ready_to_sign(), reverse=True):
             try:
@@ -1675,7 +1682,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         # remove sensitive info; then copy back details from temporary tx
         tmp_tx.remove_xpubs_and_bip32_paths()
         tx.combine_with_other_psbt(tmp_tx)
-        tx.add_info_from_wallet(self, include_xpubs_and_full_paths=False)
+        tx.add_info_from_wallet(self, include_xpubs=False)
         return tx
 
     def try_detecting_internal_addresses_corruption(self) -> None:
@@ -1733,13 +1740,19 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
     def delete_address(self, address: str) -> None:
         raise Exception("this wallet cannot delete addresses")
 
-    def get_payment_status(self, address, amount):
+    def get_onchain_request_status(self, r):
+        address = r.get_address()
+        amount = r.get_amount_sat()
         received, sent = self.get_addr_io(address)
         l = []
         for txo, x in received.items():
             h, v, is_cb = x
             txid, n = txo.split(':')
-            conf = self.get_tx_height(txid).conf
+            tx_height = self.get_tx_height(txid)
+            height = tx_height.height
+            if height > 0 and height <= r.height:
+                continue
+            conf = tx_height.conf
             l.append((conf, v))
         vsum = 0
         for conf, v in reversed(sorted(l)):
@@ -1788,7 +1801,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
             status = self.lnworker.get_payment_status(bfh(r.rhash)) if self.lnworker else PR_UNKNOWN
         else:
             assert isinstance(r, OnchainInvoice)
-            paid, conf = self.get_payment_status(r.get_address(), r.get_amount_sat())
+            paid, conf = self.get_onchain_request_status(r)
             status = PR_PAID if paid else PR_UNPAID
         return self.check_expired_status(r, status)
 
@@ -1828,11 +1841,9 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
                 d['can_receive'] = self.lnworker.can_receive_invoice(x)
         else:
             assert isinstance(x, OnchainInvoice)
-            amount_sat = x.get_amount_sat()
-            addr = x.get_address()
-            paid, conf = self.get_payment_status(addr, amount_sat)
-            d['amount_sat'] = amount_sat
-            d['address'] = addr
+            paid, conf = self.get_onchain_request_status(x)
+            d['amount_sat'] = x.get_amount_sat()
+            d['address'] = x.get_address()
             d['URI'] = self.get_request_URI(x)
             if conf is not None:
                 d['confirmations'] = conf
@@ -1904,6 +1915,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
             id=_id,
             bip70=None,
             requestor=None,
+            height=self.get_local_height(),
         )
 
     def sign_payment_request(self, key, alias, alias_addr, password):  # FIXME this is broken
@@ -2399,7 +2411,7 @@ class Imported_Wallet(Simple_Wallet):
     def get_txin_type(self, address):
         return self.db.get_imported_address(address).get('type', 'address')
 
-    def _add_input_sig_info(self, txin, address, *, only_der_suffix=True):
+    def _add_input_sig_info(self, txin, address, *, only_der_suffix):
         if not self.is_mine(address):
             return
         if txin.script_type in ('unknown', 'address'):
@@ -2533,10 +2545,10 @@ class Deterministic_Wallet(Abstract_Wallet):
         return {k.derive_pubkey(*der_suffix): (k, der_suffix)
                 for k in self.get_keystores()}
 
-    def _add_input_sig_info(self, txin, address, *, only_der_suffix=True):
+    def _add_input_sig_info(self, txin, address, *, only_der_suffix):
         self._add_txinout_derivation_info(txin, address, only_der_suffix=only_der_suffix)
 
-    def _add_txinout_derivation_info(self, txinout, address, *, only_der_suffix=True):
+    def _add_txinout_derivation_info(self, txinout, address, *, only_der_suffix):
         if not self.is_mine(address):
             return
         pubkey_deriv_info = self.get_public_keys_with_deriv_info(address)
