@@ -225,7 +225,7 @@ class ChannelsList(MyTreeView):
             self._update_chan_frozen_bg(chan=chan, items=items)
         if wallet.lnworker:
             self.update_can_send(wallet.lnworker)
-            self.update_swap_button(wallet.lnworker)
+#            self.update_swap_button(wallet.lnworker)
 
     @QtCore.pyqtSlot()
     def on_gossip_db(self):
@@ -281,11 +281,11 @@ class ChannelsList(MyTreeView):
               + ' ' + self.parent.base_unit()
         self.can_send_label.setText(msg)
 
-    def update_swap_button(self, lnworker: LNWallet):
-        if lnworker.num_sats_can_send() or lnworker.num_sats_can_receive():
-            self.swap_button.setEnabled(True)
-        else:
-            self.swap_button.setEnabled(False)
+#    def update_swap_button(self, lnworker: LNWallet):
+#        if lnworker.num_sats_can_send() or lnworker.num_sats_can_receive():
+#            self.swap_button.setEnabled(True)
+#        else:
+#            self.swap_button.setEnabled(False)
 
     def get_toolbar(self):
         h = QHBoxLayout()
