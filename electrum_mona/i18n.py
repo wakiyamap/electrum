@@ -35,7 +35,7 @@ language = gettext.translation('electrum', LOCALE_DIR, fallback=True)
 #       instead use .format:     _("My name: {}").format(name)
 def _(x):
     global language
-    dic = [('Bitcoin', 'Monacoin'), ('bitcoin', 'monacoin'), ('比特币', '萌奈币'), ('ビットコイン', 'モナコイン')]
+    dic = [('Bitcoin', 'Monacoin'), ('bitcoin', 'monacoin'), ('mBTC/kB', 'mMONA/kB'), ('比特币', '萌奈币'), ('ビットコイン', 'モナコイン')]
     for b, m in dic:
         x = x.replace(m, b)
     t = language.gettext(x)

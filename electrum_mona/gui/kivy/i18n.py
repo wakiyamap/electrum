@@ -9,7 +9,7 @@ class _(str):
     def __new__(cls, s):
         if _.lang is None:
             _.switch_lang('en')
-        dic = [('Bitcoin', 'Monacoin'), ('bitcoin', 'monacoin'), ('比特币', '萌奈币'), ('ビットコイン', 'モナコイン')]
+        dic = [('Bitcoin', 'Monacoin'), ('bitcoin', 'monacoin'), ('mBTC/kB', 'mMONA/kB'), ('比特币', '萌奈币'), ('ビットコイン', 'モナコイン')]
         for b, m in dic:
             s = s.replace(m, b)
         t = _.translate(s)
