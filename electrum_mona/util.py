@@ -751,8 +751,6 @@ mainnet_block_explorers = {
                         {'tx': 'tx/', 'addr': 'addr/'}),
     'blockbook.electrum-mona.org': ('https://blockbook.electrum-mona.org/',
                         {'tx': 'tx/', 'addr': 'address/'}),
-    'mona.blockbook.ovh': ('https://mona.blockbook.ovh/',
-                        {'tx': 'tx/', 'addr': 'address/'}),
     'chaintools.mona-coin.de': ('https://chaintools.mona-coin.de/',
                         {'tx': 'tx/', 'addr': 'address/'}),
     'Tokenview': ('https://tokenview.com/cn/',
