@@ -114,7 +114,7 @@ cp "$PROJECT_ROOT/electrum_mona/libsecp256k1-0.dll" $WINEPREFIX/drive_c/tmp/ || 
 cp "$PROJECT_ROOT/electrum_mona/libzbar-0.dll" $WINEPREFIX/drive_c/tmp/ || fail "Could not copy libzbar to its destination"
 
 # copy libgcc_s_dw2-1.dll
-cp "$CONTRIB/build-wine/libgcc_s_dw2-1.dll" $WINEPREFIX/drive_c/tmp/ || fail "Could not copy libsecp to its destination"
+cp "$CONTRIB/build-wine/libgcc_s_dw2-1.dll" $WINEPREFIX/drive_c/tmp/ || fail "Could not copy libgcc to its destination"
 
 info "Building PyInstaller."
 # we build our own PyInstaller boot loader as the default one has high
