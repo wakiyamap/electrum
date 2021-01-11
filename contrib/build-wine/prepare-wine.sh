@@ -10,12 +10,12 @@ LYRA2RE_HASH_PYTHON_FILENAME=lyra2re2_hash-1.1.2-cp37-cp37m-win32.whl
 LYRA2RE_HASH_PYTHON_SHA256=de1ce0cbccbcb779c4c9f8b0704c844c613f27ef286a5c94a55b0891528eb4cd
 
 LIBUSB_REPO="https://github.com/libusb/libusb.git"
-LIBUSB_COMMIT="e782eeb2514266f6738e242cdcb18e3ae1ed06fa"
-# ^ tag v1.0.23
+LIBUSB_COMMIT="c6a35c56016ea2ab2f19115d2ea1e85e0edae155"
+# ^ tag v1.0.24
 
 PYINSTALLER_REPO="https://github.com/SomberNight/pyinstaller.git"
-PYINSTALLER_COMMIT="6e455b2c1208465742484436009bfb1e1baf2e01"
-# ^ tag 4.0, plus a custom commit that fixes cross-compilation with MinGW
+PYINSTALLER_COMMIT="31fda9dc83feb1b3f2ff08c89ff7ae61506fc1ca"
+# ^ tag 4.1, plus a custom commit that fixes cross-compilation with MinGW
 
 PYTHON_VERSION=3.7.9
 

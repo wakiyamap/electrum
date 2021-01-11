@@ -167,14 +167,14 @@ class TestCommandsTestnet(TestCaseForTestnet):
                 {
                     "prevout_hash": "9d221a69ca3997cbeaf5624d723e7dc5f829b1023078c177d37bdae95f37c539",
                     "prevout_n": 1,
-                    "value": 1000000,
+                    "value_sats": 1000000,
                     "privkey": "p2wpkh:cVDXzzQg6RoCTfiKpe8MBvmm5d5cJc6JLuFApsFDKwWa6F5TVHpD"
                 }
             ],
             "outputs": [
                 {
                     "address": "tmona1q6h4n2rkl9vr2dka0ac00gpztrx0xkd0568925z",
-                    "value": 990000
+                    "value_sats": 990000
                 }
             ]
         }
@@ -188,7 +188,7 @@ class TestCommandsTestnet(TestCaseForTestnet):
                 {
                     "prevout_hash": "9d221a69ca3997cbeaf5624d723e7dc5f829b1023078c177d37bdae95f37c539",
                     "prevout_n": 1,
-                    "value": 1000000,
+                    "value_sats": 1000000,
                     "privkey": "p2wpkh:cVDXzzQg6RoCTfiKpe8MBvmm5d5cJc6JLuFApsFDKwWa6F5TVHpD",
                     "nsequence": 0xfffffffd
                 }
@@ -196,7 +196,7 @@ class TestCommandsTestnet(TestCaseForTestnet):
             "outputs": [
                 {
                     "address": "tmona1q6h4n2rkl9vr2dka0ac00gpztrx0xkd0568925z",
-                    "value": 990000
+                    "value_sats": 990000
                 }
             ]
         }

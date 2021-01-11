@@ -8,7 +8,7 @@ import json
 from collections import namedtuple, defaultdict
 from typing import NamedTuple, List, Tuple, Mapping, Optional, TYPE_CHECKING, Union, Dict, Set, Sequence
 import re
-
+import time
 import attr
 from aiorpcx import NetAddress
 
@@ -82,6 +82,7 @@ class Config(StoredObject):
     initial_msat = attr.ib(type=int)
     reserve_sat = attr.ib(type=int)  # applies to OTHER ctx
     htlc_minimum_msat = attr.ib(type=int)  # smallest value for INCOMING htlc
+    upfront_shutdown_script = attr.ib(type=bytes, converter=hex_to_bytes)
 
     def validate_params(self, *, funding_sat: int) -> None:
         conf_name = type(self).__name__
@@ -301,6 +302,7 @@ class UnableToDeriveSecret(LightningError): pass
 class HandshakeFailed(LightningError): pass
 class ConnStringFormatError(LightningError): pass
 class RemoteMisbehaving(LightningError): pass
+class UpfrontShutdownScriptViolation(RemoteMisbehaving): pass
 
 class NotFoundChanAnnouncementForUpdate(Exception): pass
 
@@ -1107,6 +1109,7 @@ def derive_payment_secret_from_payment_preimage(payment_preimage: bytes) -> byte
 
 
 class LNPeerAddr:
+    # note: while not programmatically enforced, this class is meant to be *immutable*
 
     def __init__(self, host: str, port: int, pubkey: bytes):
         assert isinstance(host, str), repr(host)
@@ -1121,7 +1124,7 @@ class LNPeerAddr:
         self.host = host
         self.port = port
         self.pubkey = pubkey
-        self._net_addr_str = str(net_addr)
+        self._net_addr = net_addr
 
     def __str__(self):
         return '{}@{}'.format(self.pubkey.hex(), self.net_addr_str())
@@ -1129,8 +1132,11 @@ class LNPeerAddr:
     def __repr__(self):
         return f'<LNPeerAddr host={self.host} port={self.port} pubkey={self.pubkey.hex()}>'
 
+    def net_addr(self) -> NetAddress:
+        return self._net_addr
+
     def net_addr_str(self) -> str:
-        return self._net_addr_str
+        return str(self._net_addr)
 
     def __eq__(self, other):
         if not isinstance(other, LNPeerAddr):
@@ -1308,3 +1314,17 @@ class OnionFailureCodeMetaFlag(IntFlag):
     NODE     = 0x2000
     UPDATE   = 0x1000
 
+
+class ChannelBlackList:
+
+    def __init__(self):
+        self.blacklist = dict() # short_chan_id -> timestamp
+
+    def add(self, short_channel_id: ShortChannelID):
+        now = int(time.time())
+        self.blacklist[short_channel_id] = now
+
+    def get_current_list(self) -> Set[ShortChannelID]:
+        BLACKLIST_DURATION = 3600
+        now = int(time.time())
+        return set(k for k, t in self.blacklist.items() if now - t < BLACKLIST_DURATION)
