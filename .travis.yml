@@ -69,6 +69,8 @@ jobs:
       services:
         - docker
       install:
+        - sudo apt update -y
+        - sudo apt install docker-ce=5:20.10.2~3-0~ubuntu-bionic -y
         - sudo docker build --no-cache -t electrum-mona-appimage-builder-img ./contrib/build-linux/appimage/
       script:
         - sudo docker run --name electrum-mona-appimage-builder-cont -v $PWD:/opt/electrum-mona --rm --workdir /opt/electrum-mona/contrib/build-linux/appimage electrum-mona-appimage-builder-img ./build.sh
