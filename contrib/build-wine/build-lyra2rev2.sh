@@ -3,7 +3,7 @@
 LYRA2RE_HASH_PYTHON_URL=https://github.com/wakiyamap/lyra2re-hash-python.git
 WINETRICKS_MASTER_URL=https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks
 
-PYTHON_VERSION=3.7.6
+PYTHON_VERSION=3.8.7
 
 ## These settings probably don't need change
 export WINEPREFIX=/opt/wine64
@@ -105,6 +105,7 @@ cp libvcruntime140.a $WINEPREFIX/drive_c/MinGW/lib/
 cd $WINEPREFIX/drive_c/tmp/
 git clone $LYRA2RE_HASH_PYTHON_URL
 cd lyra2re-hash-python
+git checkout 1.1.2
 $PYTHON setup.py bdist_wheel
 
 ## cp $WINEPREFIX/drive_c/tmp/$LYRA2RE_HASH_PYTHON_URL/dist/* ~/

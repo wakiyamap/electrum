@@ -5,9 +5,9 @@ NSIS_FILENAME=nsis-3.05-setup.exe
 NSIS_URL=https://downloads.sourceforge.net/project/nsis/NSIS%203/3.05/$NSIS_FILENAME
 NSIS_SHA256=1a3cc9401667547b9b9327a177b13485f7c59c2303d4b6183e7bc9e6c8d6bfdb
 
-LYRA2RE_HASH_PYTHON_URL=https://github.com/wakiyamap/lyra2re-hash-python/releases/download/1.1.2/lyra2re2_hash-1.1.2-cp37-cp37m-win32.whl
-LYRA2RE_HASH_PYTHON_FILENAME=lyra2re2_hash-1.1.2-cp37-cp37m-win32.whl
-LYRA2RE_HASH_PYTHON_SHA256=de1ce0cbccbcb779c4c9f8b0704c844c613f27ef286a5c94a55b0891528eb4cd
+LYRA2RE_HASH_PYTHON_URL=https://github.com/wakiyamap/lyra2re-hash-python/releases/download/1.1.2/lyra2re2_hash-1.1.2-cp38-cp38-win32.whl
+LYRA2RE_HASH_PYTHON_FILENAME=lyra2re2_hash-1.1.2-cp38-cp38-win32.whl
+LYRA2RE_HASH_PYTHON_SHA256=45c021ae2b992d516339f484e4031b06a8ef05d14faba4c840c3a17a4c9dfcf2
 
 LIBUSB_REPO="https://github.com/libusb/libusb.git"
 LIBUSB_COMMIT="c6a35c56016ea2ab2f19115d2ea1e85e0edae155"
