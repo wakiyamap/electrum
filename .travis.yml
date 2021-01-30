@@ -16,6 +16,13 @@ jobs:
         - TARGET_OS=Windows
       services:
         - docker
+      before_install:
+        - sudo rm -rf /var/lib/apt/lists/*
+        - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+        - sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+        - sudo apt-get update
+        - sudo apt-get -y -o Dpkg::Options::="--force-confnew" install docker-ce
+        - docker version
       install:
         - sudo docker build --no-cache -t electrum-mona-wine-builder-img ./contrib/build-wine/
       script:
@@ -69,8 +76,6 @@ jobs:
       services:
         - docker
       install:
-        - sudo apt update -y
-        - sudo apt install docker-ce=5:20.10.2~3-0~ubuntu-bionic -y
         - sudo docker build --no-cache -t electrum-mona-appimage-builder-img ./contrib/build-linux/appimage/
       script:
         - sudo docker run --name electrum-mona-appimage-builder-cont -v $PWD:/opt/electrum-mona --rm --workdir /opt/electrum-mona/contrib/build-linux/appimage electrum-mona-appimage-builder-img ./build.sh
