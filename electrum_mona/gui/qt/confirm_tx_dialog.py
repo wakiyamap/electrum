@@ -112,8 +112,7 @@ class TxEditor:
             raise
         # TODO monacoin is OK?
         use_rbf = bool(self.config.get('use_rbf', False))
-        if use_rbf:
-            self.tx.set_rbf(False)
+        self.tx.set_rbf(use_rbf)
 
     def have_enough_funds_assuming_zero_fees(self) -> bool:
         try:

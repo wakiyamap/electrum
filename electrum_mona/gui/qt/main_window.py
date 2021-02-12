@@ -1525,9 +1525,10 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         if not self.question(msg):
             return
         self.save_pending_invoice()
-        attempts = LN_NUM_PAYMENT_ATTEMPTS
         def task():
-            self.wallet.lnworker.pay(invoice, amount_msat=amount_msat, attempts=attempts)
+            coro = self.wallet.lnworker.pay_invoice(invoice, amount_msat=amount_msat, attempts=LN_NUM_PAYMENT_ATTEMPTS)
+            fut = asyncio.run_coroutine_threadsafe(coro, self.network.asyncio_loop)
+            return fut.result()
         self.wallet.thread.add(task)
 
     def on_request_status(self, wallet, key, status):
@@ -3243,8 +3244,6 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         except CannotCPFP as e:
             self.show_error(str(e))
             return
-        # new_tx.set_rbf(True)
-        new_tx.set_rbf(False)
         self.show_transaction(new_tx)
 
     def _add_info_to_tx_from_wallet_and_network(self, tx: PartialTransaction) -> bool:
@@ -3331,8 +3330,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         except Exception as e:
             self.show_error(str(e))
             return
-        if is_final:
-            new_tx.set_rbf(False)
+        new_tx.set_rbf(not is_final)
         self.show_transaction(new_tx, tx_desc=tx_label)
 
     def bump_fee_dialog(self, tx: Transaction):

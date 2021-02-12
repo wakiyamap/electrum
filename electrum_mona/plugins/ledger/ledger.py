@@ -8,7 +8,7 @@ from electrum_mona import ecc
 from electrum_mona import bip32
 from electrum_mona import constants
 from electrum_mona.crypto import hash_160
-from electrum_mona.bitcoin import int_to_hex, var_int, is_segwit_script_type
+from electrum_mona.bitcoin import int_to_hex, var_int, is_segwit_script_type, is_b58_address
 from electrum_mona.bip32 import BIP32Node, convert_bip32_intpath_to_strpath
 from electrum_mona.i18n import _
 from electrum_mona.keystore import Hardware_KeyStore
@@ -417,6 +417,8 @@ class Ledger_KeyStore(Hardware_KeyStore):
             if len(tx.outputs()) > 2:
                 self.give_error("Transaction with more than 2 outputs not supported")
         for txout in tx.outputs():
+            if client_electrum.is_hw1() and txout.address and not is_b58_address(txout.address):
+                self.give_error(_("This {} device can only send to base58 addresses.").format(self.device))
             if not txout.address:
                 if client_electrum.is_hw1():
                     self.give_error(_("Only address outputs are supported by {}").format(self.device))
@@ -578,7 +580,7 @@ class Ledger_KeyStore(Hardware_KeyStore):
 
 class LedgerPlugin(HW_PluginBase):
     keystore_class = Ledger_KeyStore
-    minimum_library = (0, 1, 30)
+    minimum_library = (0, 1, 32)
     client = None
     DEVICE_IDS = [
                    (0x2581, 0x1807), # HW.1 legacy btchip

@@ -195,11 +195,8 @@ async def sweep(
         locktime = get_locktime_for_new_transaction(network)
 
     tx = PartialTransaction.from_io(inputs, outputs, locktime=locktime, version=tx_version)
-    # monacoin's rbf is disabled 
-    #rbf = config.get('use_rbf', True)
-    #if rbf:
-    #    tx.set_rbf(True)
-    tx.set_rbf(False)
+    #rbf = bool(config.get('use_rbf', True))
+    #tx.set_rbf(rbf)
     tx.sign(keypairs)
     return tx
 
@@ -1305,6 +1302,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         # Timelock tx to current height.
         tx.locktime = get_locktime_for_new_transaction(self.network)
 
+        tx.set_rbf(False)  # caller can set RBF manually later
         tx.add_info_from_wallet(self)
         run_hook('make_unsigned_transaction', self, tx)
         return tx
@@ -1483,6 +1481,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
                 f"got {actual_fee}, expected >={target_min_fee}. "
                 f"target rate was {new_fee_rate}")
         tx_new.locktime = get_locktime_for_new_transaction(self.network)
+        tx_new.set_rbf(True)
         tx_new.add_info_from_wallet(self)
         return tx_new
 
@@ -1608,6 +1607,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         outputs = [PartialTxOutput.from_address_and_value(out_address, output_value)]
         locktime = get_locktime_for_new_transaction(self.network)
         tx_new = PartialTransaction.from_io(inputs, outputs, locktime=locktime)
+        tx_new.set_rbf(True)
         tx_new.add_info_from_wallet(self)
         return tx_new
 
@@ -1658,6 +1658,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
             raise CannotDoubleSpendTx(_("The output value remaining after fee is too low."))
         outputs = [PartialTxOutput.from_address_and_value(out_address, value - new_fee)]
         tx_new = PartialTransaction.from_io(inputs, outputs, locktime=locktime)
+        tx_new.set_rbf(True)
         tx_new.add_info_from_wallet(self)
         return tx_new
 
@@ -2303,9 +2304,8 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         if locktime is not None:
             tx.locktime = locktime
         if rbf is None:
-            rbf = self.config.get('use_rbf', True)
-        if rbf:
-            tx.set_rbf(True)
+            rbf = bool(self.config.get('use_rbf', True))
+        tx.set_rbf(rbf)
         if not unsigned:
             self.sign_transaction(tx, password)
         return tx
