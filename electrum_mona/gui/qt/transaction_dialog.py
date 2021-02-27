@@ -28,7 +28,7 @@ import copy
 import datetime
 import traceback
 import time
-from typing import TYPE_CHECKING, Callable, Optional, List
+from typing import TYPE_CHECKING, Callable, Optional, List, Union
 from functools import partial
 from decimal import Decimal
 
@@ -53,7 +53,7 @@ from .util import (MessageBoxMixin, read_QIcon, Buttons, icon_path,
                    char_width_in_lineedit, TRANSACTION_FILE_EXTENSION_FILTER_SEPARATE,
                    TRANSACTION_FILE_EXTENSION_FILTER_ONLY_COMPLETE_TX,
                    TRANSACTION_FILE_EXTENSION_FILTER_ONLY_PARTIAL_TX,
-                   BlockingWaitingDialog, getSaveFileName)
+                   BlockingWaitingDialog, getSaveFileName, ColorSchemeItem)
 
 from .fee_slider import FeeSlider, FeeComboBox
 from .confirm_tx_dialog import TxEditor
@@ -131,10 +131,27 @@ class BaseTxDialog(QDialog, MessageBoxMixin):
         vbox.addWidget(self.inputs_header)
         self.inputs_textedit = QTextEditWithDefaultSize()
         vbox.addWidget(self.inputs_textedit)
+
+        self.txo_color_recv = TxOutputColoring(
+            legend=_("Receiving Address"), color=ColorScheme.GREEN, tooltip=_("Wallet receive address"))
+        self.txo_color_change = TxOutputColoring(
+            legend=_("Change Address"), color=ColorScheme.YELLOW, tooltip=_("Wallet change address"))
+        self.txo_color_2fa = TxOutputColoring(
+            legend=_("TrustedCoin (2FA) batch fee"), color=ColorScheme.BLUE, tooltip=_("TrustedCoin (2FA) fee for the next batch of transactions"))
+
+        outheader_hbox = QHBoxLayout()
+        outheader_hbox.setContentsMargins(0, 0, 0, 0)
+        vbox.addLayout(outheader_hbox)
         self.outputs_header = QLabel()
-        vbox.addWidget(self.outputs_header)
+        outheader_hbox.addWidget(self.outputs_header)
+        outheader_hbox.addStretch(2)
+        outheader_hbox.addWidget(self.txo_color_recv.legend_label)
+        outheader_hbox.addWidget(self.txo_color_change.legend_label)
+        outheader_hbox.addWidget(self.txo_color_2fa.legend_label)
+
         self.outputs_textedit = QTextEditWithDefaultSize()
         vbox.addWidget(self.outputs_textedit)
+
         self.sign_button = b = QPushButton(_("Sign"))
         b.clicked.connect(self.sign)
 
@@ -485,11 +502,22 @@ class BaseTxDialog(QDialog, MessageBoxMixin):
         size_str = _("Size:") + ' %d bytes'% size
         fee_str = _("Fee") + ': %s' % (format_amount(fee) + ' ' + base_unit if fee is not None else _('unknown'))
         if fee is not None:
-            fee_rate = fee/size*1000
-            fee_str += '  ( %s ) ' % self.main_window.format_fee_rate(fee_rate)
-            feerate_warning = simple_config.FEERATE_WARNING_HIGH_FEE
-            if fee_rate > feerate_warning:
-                fee_str += ' - ' + _('Warning') + ': ' + _("high fee") + '!'
+            fee_rate = Decimal(fee) / size  # sat/byte
+            fee_str += '  ( %s ) ' % self.main_window.format_fee_rate(fee_rate * 1000)
+            if isinstance(self.tx, PartialTransaction):
+                if isinstance(self, PreviewTxDialog):
+                    invoice_amt = self.tx.output_value() if self.output_value == '!' else self.output_value
+                else:
+                    invoice_amt = amount
+                fee_warning_tuple = self.wallet.get_tx_fee_warning(
+                    invoice_amt=invoice_amt, tx_size=size, fee=fee)
+                if fee_warning_tuple:
+                    allow_send, long_warning, short_warning = fee_warning_tuple
+                    fee_str += " - <font color={color}>{header}: {body}</font>".format(
+                        header=_('Warning'),
+                        body=short_warning,
+                        color=ColorScheme.RED.as_color().name(),
+                    )
         if isinstance(self.tx, PartialTransaction):
             risk_of_burning_coins = (can_sign and fee is not None
                                      and self.wallet.get_warning_for_risk_of_burning_coins_as_fees(self.tx))
@@ -531,22 +559,21 @@ class BaseTxDialog(QDialog, MessageBoxMixin):
             if selected_coins is not None:
                 inputs_header_text += f"  -  " + _("Coin selection active ({} UTXOs selected)").format(len(selected_coins))
         self.inputs_header.setText(inputs_header_text)
-        ext = QTextCharFormat()
-        rec = QTextCharFormat()
-        rec.setBackground(QBrush(ColorScheme.GREEN.as_color(background=True)))
-        rec.setToolTip(_("Wallet receive address"))
-        chg = QTextCharFormat()
-        chg.setBackground(QBrush(ColorScheme.YELLOW.as_color(background=True)))
-        chg.setToolTip(_("Wallet change address"))
-        twofactor = QTextCharFormat()
-        twofactor.setBackground(QBrush(ColorScheme.BLUE.as_color(background=True)))
-        twofactor.setToolTip(_("TrustedCoin (2FA) fee for the next batch of transactions"))
 
+        ext = QTextCharFormat()
+        tf_used_recv, tf_used_change, tf_used_2fa = False, False, False
         def text_format(addr):
+            nonlocal tf_used_recv, tf_used_change, tf_used_2fa
             if self.wallet.is_mine(addr):
-                return chg if self.wallet.is_change(addr) else rec
+                if self.wallet.is_change(addr):
+                    tf_used_change = True
+                    return self.txo_color_change.text_char_format
+                else:
+                    tf_used_recv = True
+                    return self.txo_color_recv.text_char_format
             elif self.wallet.is_billing_address(addr):
-                return twofactor
+                tf_used_2fa = True
+                return self.txo_color_2fa.text_char_format
             return ext
 
         def format_amount(amt):
@@ -586,6 +613,10 @@ class BaseTxDialog(QDialog, MessageBoxMixin):
                 cursor.insertText('\t', ext)
                 cursor.insertText(format_amount(v), ext)
             cursor.insertBlock()
+
+        self.txo_color_recv.legend_label.setVisible(tf_used_recv)
+        self.txo_color_change.legend_label.setVisible(tf_used_change)
+        self.txo_color_2fa.legend_label.setVisible(tf_used_2fa)
 
     def add_tx_stats(self, vbox):
         hbox_stats = QHBoxLayout()
@@ -690,6 +721,31 @@ class TxDetailLabel(QLabel):
             self.setWordWrap(word_wrap)
 
 
+class TxOutputColoring:
+    # used for both inputs and outputs
+
+    def __init__(
+            self,
+            *,
+            legend: str,
+            color: ColorSchemeItem,
+            tooltip: str,
+    ):
+        self.color = color.as_color(background=True)
+        self.legend_label = QLabel("<font color={color}>{box_char}</font> = {label}".format(
+            color=self.color.name(),
+            box_char="█",
+            label=legend,
+        ))
+        font = self.legend_label.font()
+        font.setPointSize(font.pointSize() - 1)
+        self.legend_label.setFont(font)
+        self.legend_label.setVisible(False)
+        self.text_char_format = QTextCharFormat()
+        self.text_char_format.setBackground(QBrush(self.color))
+        self.text_char_format.setToolTip(tooltip)
+
+
 class TxDialog(BaseTxDialog):
     def __init__(self, tx: Transaction, *, parent: 'ElectrumWindow', desc, prompt_if_unsaved):
         BaseTxDialog.__init__(self, parent=parent, desc=desc, prompt_if_unsaved=prompt_if_unsaved, finalized=True)
@@ -697,11 +753,23 @@ class TxDialog(BaseTxDialog):
         self.update()
 
 
-
 class PreviewTxDialog(BaseTxDialog, TxEditor):
 
-    def __init__(self, *, make_tx, external_keypairs, window: 'ElectrumWindow'):
-        TxEditor.__init__(self, window=window, make_tx=make_tx, is_sweep=bool(external_keypairs))
+    def __init__(
+            self,
+            *,
+            make_tx,
+            external_keypairs,
+            window: 'ElectrumWindow',
+            output_value: Union[int, str],
+    ):
+        TxEditor.__init__(
+            self,
+            window=window,
+            make_tx=make_tx,
+            is_sweep=bool(external_keypairs),
+            output_value=output_value,
+        )
         BaseTxDialog.__init__(self, parent=window, desc='', prompt_if_unsaved=False,
                               finalized=False, external_keypairs=external_keypairs)
         BlockingWaitingDialog(window, _("Preparing transaction..."),

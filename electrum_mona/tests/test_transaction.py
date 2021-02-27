@@ -126,7 +126,7 @@ class TestTransaction(ElectrumTestCase):
         self.assertEqual(tx.estimated_size(), 193)
 
     def test_estimated_output_size(self):
-        estimated_output_size = transaction.Transaction.estimated_output_size
+        estimated_output_size = transaction.Transaction.estimated_output_size_for_address
         self.assertEqual(estimated_output_size('MFMy9FwJsV6HiN5eZDqDETw4pw52q3UGrb'), 34)
         self.assertEqual(estimated_output_size('PHjTKtgYLTJ9D2Bzw2f6xBB41KBm2HeGfg'), 32)
         self.assertEqual(estimated_output_size('mona1quunc907zfyj7cyxhnp9584rj0wmdka2ec9w3af'), 31)

@@ -81,7 +81,8 @@ Label.register(
 
 
 from electrum_mona.util import (NoDynamicFeeEstimates, NotEnoughFunds,
-                           BITCOIN_BIP21_URI_SCHEME, LIGHTNING_URI_SCHEME)
+                           BITCOIN_BIP21_URI_SCHEME, LIGHTNING_URI_SCHEME,
+                           UserFacingException)
 
 from .uix.dialogs.lightning_open_channel import LightningOpenChannelDialog
 from .uix.dialogs.lightning_channels import LightningChannelsDialog, SwapDialog
@@ -182,6 +183,14 @@ class ElectrumWindow(App, Logger):
     use_rbf = BooleanProperty(False)
     def on_use_rbf(self, instance, x):
         self.electrum_config.set_key('use_rbf', self.use_rbf, False)
+
+    use_gossip = BooleanProperty(False)
+    def on_use_gossip(self, instance, x):
+        self.electrum_config.set_key('use_gossip', self.use_gossip, True)
+        if self.use_gossip:
+            self.network.start_gossip()
+        else:
+            self.network.stop_gossip()
 
     android_backups = BooleanProperty(False)
     def on_android_backups(self, instance, x):
@@ -394,6 +403,7 @@ class ElectrumWindow(App, Logger):
         self.fx = self.daemon.fx
         self.use_rbf = config.get('use_rbf', False)
         self.android_backups = config.get('android_backups', False)
+        self.use_gossip = config.get('use_gossip', False)
         self.use_unconfirmed = not config.get('confirmed_only', False)
 
         # create triggers so as to minimize updating a max of 2 times a sec
@@ -507,7 +517,7 @@ class ElectrumWindow(App, Logger):
 
     def scan_qr(self, on_complete):
         if platform != 'android':
-            return
+            return self.scan_qr_non_android(on_complete)
         from jnius import autoclass, cast
         from android import activity
         PythonActivity = autoclass('org.kivy.android.PythonActivity')
@@ -529,6 +539,18 @@ class ElectrumWindow(App, Logger):
                 activity.unbind(on_activity_result=on_qr_result)
         activity.bind(on_activity_result=on_qr_result)
         PythonActivity.mActivity.startActivityForResult(intent, 0)
+
+    def scan_qr_non_android(self, on_complete):
+        from electrum_mona import qrscanner
+        try:
+            video_dev = self.electrum_config.get_video_device()
+            data = qrscanner.scan_barcode(video_dev)
+            on_complete(data)
+        except UserFacingException as e:
+            self.show_error(e)
+        except BaseException as e:
+            self.logger.exception('camera error')
+            self.show_error(repr(e))
 
     def do_share(self, data, title):
         if platform != 'android':

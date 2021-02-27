@@ -720,6 +720,8 @@ class Channel(AbstractChannel):
         return self.can_send_ctx_updates() and not self.is_closing()
 
     def is_frozen_for_sending(self) -> bool:
+        if self.lnworker and self.lnworker.channel_db is None and not self.lnworker.is_trampoline_peer(self.node_id):
+            return True
         return self.storage.get('frozen_for_sending', False)
 
     def set_frozen_for_sending(self, b: bool) -> None:
@@ -1049,7 +1051,9 @@ class Channel(AbstractChannel):
             if is_sent:
                 self.lnworker.htlc_fulfilled(self, payment_hash, htlc.htlc_id, htlc.amount_msat)
             else:
-                self.lnworker.htlc_received(self, payment_hash)
+                # FIXME
+                #self.lnworker.htlc_received(self, payment_hash)
+                pass
 
     def balance(self, whose: HTLCOwner, *, ctx_owner=HTLCOwner.LOCAL, ctn: int = None) -> int:
         assert type(whose) is HTLCOwner
@@ -1084,9 +1088,6 @@ class Channel(AbstractChannel):
         sender = subject
         receiver = subject.inverted()
         initiator = LOCAL if self.constraints.is_initiator else REMOTE  # the initiator/funder pays on-chain fees
-        is_frozen = self.is_frozen_for_sending() if subject == LOCAL else self.is_frozen_for_receiving()
-        if not self.is_active() or is_frozen:
-            return 0
 
         def consider_ctx(*, ctx_owner: HTLCOwner, is_htlc_dust: bool) -> int:
             ctn = self.get_next_ctn(ctx_owner)

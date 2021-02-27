@@ -44,6 +44,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple, Union, NamedTuple, Sequ
 from abc import ABC, abstractmethod
 import itertools
 import threading
+import enum
 
 from aiorpcx import TaskGroup
 
@@ -57,7 +58,7 @@ from .util import (NotEnoughFunds, UserCancelled, profiler,
                    InvalidPassword, format_time, timestamp_to_datetime, Satoshis,
                    Fiat, bfh, bh2u, TxMinedInfo, quantize_feerate, create_bip21_uri, OrderedDictWithIndex)
 from .util import get_backup_dir
-from .simple_config import SimpleConfig
+from .simple_config import SimpleConfig, FEE_RATIO_HIGH_WARNING, FEERATE_WARNING_HIGH_FEE
 from .bitcoin import COIN, TYPE_ADDRESS
 from .bitcoin import is_address, address_to_script, is_minikey, relayfee, dust_threshold
 from .crypto import sha256d
@@ -95,6 +96,12 @@ TX_STATUS = [
     _('Not Verified'),
     _('Local'),
 ]
+
+
+class BumpFeeStrategy(enum.Enum):
+    COINCHOOSER = enum.auto()
+    DECREASE_CHANGE = enum.auto()
+    DECREASE_PAYMENT = enum.auto()
 
 
 async def _append_utxos_to_inputs(*, inputs: List[PartialTxInput], network: 'Network',
@@ -950,9 +957,12 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
 
     @profiler
     def get_detailed_history(self, from_timestamp=None, to_timestamp=None,
-                             fx=None, show_addresses=False):
+                             fx=None, show_addresses=False, from_height=None, to_height=None):
         # History with capital gains, using utxo pricing
         # FIXME: Lightning capital gains would requires FIFO
+        if (from_timestamp is not None or to_timestamp is not None) \
+                and (from_height is not None or to_height is not None):
+            raise Exception('timestamp and block height based filtering cannot be used together')
         out = []
         income = 0
         expenditures = 0
@@ -965,6 +975,11 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
             if from_timestamp and (timestamp or now) < from_timestamp:
                 continue
             if to_timestamp and (timestamp or now) >= to_timestamp:
+                continue
+            height = item['height']
+            if from_height is not None and from_height > height > 0:
+                continue
+            if to_height is not None and (height >= to_height or height <= 0):
                 continue
             tx_hash = item['txid']
             tx = self.db.get_transaction(tx_hash)
@@ -1005,6 +1020,8 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
             summary = {
                 'start_date': start_date,
                 'end_date': end_date,
+                'from_height': from_height,
+                'to_height': to_height,
                 'start_balance': Satoshis(start_balance),
                 'end_balance': Satoshis(end_balance),
                 'incoming': Satoshis(income),
@@ -1430,6 +1447,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
             txid: str = None,
             new_fee_rate: Union[int, float, Decimal],
             coins: Sequence[PartialTxInput] = None,
+            strategies: Sequence[BumpFeeStrategy] = None,
     ) -> PartialTransaction:
         """Increase the miner fee of 'tx'.
         'new_fee_rate' is the target min rate in sat/vbyte
@@ -1441,6 +1459,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         if not isinstance(tx, PartialTransaction):
             tx = PartialTransaction.from_tx(tx)
         assert isinstance(tx, PartialTransaction)
+        tx.remove_signatures()
         if tx.is_final():
             raise CannotBumpFee(_('Transaction is final'))
         new_fee_rate = quantize_feerate(new_fee_rate)  # strip excess precision
@@ -1455,29 +1474,42 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         old_fee_rate = old_fee / old_tx_size  # sat/vbyte
         if new_fee_rate <= old_fee_rate:
             raise CannotBumpFee(_("The new fee rate needs to be higher than the old fee rate."))
-        try:
-            # method 1: keep all inputs, keep all not is_mine outputs,
-            #           allow adding new inputs
-            tx_new = self._bump_fee_through_coinchooser(
-                tx=tx,
-                txid=txid,
-                new_fee_rate=new_fee_rate,
-                coins=coins,
-            )
-            method_used = 1
-        except CannotBumpFee:
-            # method 2: keep all inputs, no new inputs are added,
-            #           allow decreasing and removing outputs (change is decreased first)
-            # This is less "safe" as it might end up decreasing e.g. a payment to a merchant;
-            # but e.g. if the user has sent "Max" previously, this is the only way to RBF.
-            tx_new = self._bump_fee_through_decreasing_outputs(
-                tx=tx, new_fee_rate=new_fee_rate)
-            method_used = 2
+
+        if not strategies:
+            strategies = [BumpFeeStrategy.COINCHOOSER, BumpFeeStrategy.DECREASE_CHANGE]
+        tx_new = None
+        exc = None
+        for strat in strategies:
+            try:
+                if strat == BumpFeeStrategy.COINCHOOSER:
+                    tx_new = self._bump_fee_through_coinchooser(
+                        tx=tx,
+                        txid=txid,
+                        new_fee_rate=new_fee_rate,
+                        coins=coins,
+                    )
+                elif strat == BumpFeeStrategy.DECREASE_CHANGE:
+                    tx_new = self._bump_fee_through_decreasing_change(
+                        tx=tx, new_fee_rate=new_fee_rate)
+                elif strat == BumpFeeStrategy.DECREASE_PAYMENT:
+                    tx_new = self._bump_fee_through_decreasing_payment(
+                        tx=tx, new_fee_rate=new_fee_rate)
+                else:
+                    raise NotImplementedError(f"unexpected strategy: {strat}")
+            except CannotBumpFee as e:
+                exc = e
+            else:
+                strat_used = strat
+                break
+        if tx_new is None:
+            assert exc
+            raise exc  # all strategies failed, re-raise last exception
+
         target_min_fee = new_fee_rate * tx_new.estimated_size()
         actual_fee = tx_new.get_fee()
         if actual_fee + 1 < target_min_fee:
             raise CannotBumpFee(
-                f"bump_fee fee target was not met (method: {method_used}). "
+                f"bump_fee fee target was not met (strategy: {strat_used}). "
                 f"got {actual_fee}, expected >={target_min_fee}. "
                 f"target rate was {new_fee_rate}")
         tx_new.locktime = get_locktime_for_new_transaction(self.network)
@@ -1493,6 +1525,12 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
             new_fee_rate: Union[int, Decimal],
             coins: Sequence[PartialTxInput] = None,
     ) -> PartialTransaction:
+        """Increase the miner fee of 'tx'.
+
+        - keeps all inputs
+        - keeps all not is_mine outputs,
+        - allows adding new inputs
+        """
         assert txid
         tx = copy.deepcopy(tx)
         tx.add_info_from_wallet(self)
@@ -1539,17 +1577,26 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         except NotEnoughFunds as e:
             raise CannotBumpFee(e)
 
-    def _bump_fee_through_decreasing_outputs(
+    def _bump_fee_through_decreasing_change(
             self,
             *,
             tx: PartialTransaction,
             new_fee_rate: Union[int, Decimal],
     ) -> PartialTransaction:
+        """Increase the miner fee of 'tx'.
+
+        - keeps all inputs
+        - no new inputs are added
+        - allows decreasing and removing outputs (change is decreased first)
+        This is less "safe" than "coinchooser" method as it might end up decreasing
+        e.g. a payment to a merchant; but e.g. if the user has sent "Max" previously,
+        this is the only way to RBF.
+        """
         tx = copy.deepcopy(tx)
         tx.add_info_from_wallet(self)
         assert tx.get_fee() is not None
         inputs = tx.inputs()
-        outputs = list(tx.outputs())
+        outputs = tx._outputs  # note: we will mutate this directly
 
         # use own outputs
         s = list(filter(lambda o: self.is_mine(o.address), outputs))
@@ -1559,14 +1606,14 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
             x_fee = run_hook('get_tx_extra_fee', self, tx)
             if x_fee:
                 x_fee_address, x_fee_amount = x_fee
-                s = filter(lambda o: o.address != x_fee_address, s)
+                s = list(filter(lambda o: o.address != x_fee_address, s))
         if not s:
             raise CannotBumpFee('No outputs at all??')
 
         # prioritize low value outputs, to get rid of dust
         s = sorted(s, key=lambda o: o.value)
         for o in s:
-            target_fee = int(round(tx.estimated_size() * new_fee_rate))
+            target_fee = int(math.ceil(tx.estimated_size() * new_fee_rate))
             delta = target_fee - tx.get_fee()
             i = outputs.index(o)
             if o.value - delta >= self.dust_threshold():
@@ -1577,12 +1624,72 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
                 break
             else:
                 del outputs[i]
-                delta -= o.value
-                # note: delta might be negative now, in which case
-                # the value of the next output will be increased
+                # note: we mutated the outputs of tx, which will affect
+                #       tx.estimated_size() in the next iteration
         if delta > 0:
             raise CannotBumpFee(_('Could not find suitable outputs'))
 
+        return PartialTransaction.from_io(inputs, outputs)
+
+    def _bump_fee_through_decreasing_payment(
+            self,
+            *,
+            tx: PartialTransaction,
+            new_fee_rate: Union[int, Decimal],
+    ) -> PartialTransaction:
+        """Increase the miner fee of 'tx'.
+
+        - keeps all inputs
+        - no new inputs are added
+        - decreases payment outputs (not change!). Each non-ismine output is decreased
+          proportionally to their byte-size.
+        """
+        tx = copy.deepcopy(tx)
+        tx.add_info_from_wallet(self)
+        assert tx.get_fee() is not None
+        inputs = tx.inputs()
+        outputs = tx.outputs()
+
+        # select non-ismine outputs
+        s = [(idx, out) for (idx, out) in enumerate(outputs)
+             if not self.is_mine(out.address)]
+        # exempt 2fa fee output if present
+        x_fee = run_hook('get_tx_extra_fee', self, tx)
+        if x_fee:
+            x_fee_address, x_fee_amount = x_fee
+            s = [(idx, out) for (idx, out) in s if out.address != x_fee_address]
+        if not s:
+            raise CannotBumpFee("Cannot find payment output")
+
+        del_out_idxs = set()
+        tx_size = tx.estimated_size()
+        cur_fee = tx.get_fee()
+        # Main loop. Each iteration decreases value of all selected outputs.
+        # The number of iterations is bounded by len(s) as only the final iteration
+        # can *not remove* any output.
+        for __ in range(len(s) + 1):
+            target_fee = int(math.ceil(tx_size * new_fee_rate))
+            delta_total = target_fee - cur_fee
+            if delta_total <= 0:
+                break
+            out_size_total = sum(Transaction.estimated_output_size_for_script(out.scriptpubkey.hex())
+                                 for (idx, out) in s if idx not in del_out_idxs)
+            for idx, out in s:
+                out_size = Transaction.estimated_output_size_for_script(out.scriptpubkey.hex())
+                delta = int(math.ceil(delta_total * out_size / out_size_total))
+                if out.value - delta >= self.dust_threshold():
+                    new_output_value = out.value - delta
+                    assert isinstance(new_output_value, int)
+                    outputs[idx].value = new_output_value
+                    cur_fee += delta
+                else:  # remove output
+                    tx_size -= out_size
+                    cur_fee += out.value
+                    del_out_idxs.add(idx)
+        if delta_total > 0:
+            raise CannotBumpFee(_('Could not find suitable outputs'))
+
+        outputs = [out for (idx, out) in enumerate(outputs) if idx not in del_out_idxs]
         return PartialTransaction.from_io(inputs, outputs)
 
     def cpfp(self, tx: Transaction, fee: int) -> Optional[PartialTransaction]:
@@ -1621,6 +1728,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         if not isinstance(tx, PartialTransaction):
             tx = PartialTransaction.from_tx(tx)
         assert isinstance(tx, PartialTransaction)
+        tx.remove_signatures()
 
         if tx.is_final():
             raise CannotDoubleSpendTx(_('Transaction is final'))
@@ -2344,6 +2452,40 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
                     "do not accept to sign it more than once,\n"
                     "otherwise you could end up paying a different fee."))
 
+    def get_tx_fee_warning(
+            self,
+            *,
+            invoice_amt: int,
+            tx_size: int,
+            fee: int,
+    ) -> Optional[Tuple[bool, str, str]]:
+        feerate = Decimal(fee) / tx_size  # sat/byte
+        fee_ratio = Decimal(fee) / invoice_amt if invoice_amt else 1
+        long_warning = None
+        short_warning = None
+        allow_send = True
+        if feerate < self.relayfee() / 1000:
+            long_warning = (
+                    _("This transaction requires a higher fee, or it will not be propagated by your current server") + "\n"
+                    + _("Try to raise your transaction fee, or use a server with a lower relay fee.")
+            )
+            short_warning = _("below relay fee") + "!"
+            allow_send = False
+        elif fee_ratio >= FEE_RATIO_HIGH_WARNING:
+            long_warning = (
+                    _('Warning') + ': ' + _("The fee for this transaction seems unusually high.")
+                    + f'\n({fee_ratio*100:.2f}% of amount)')
+            short_warning = _("high fee ratio") + "!"
+        elif feerate > FEERATE_WARNING_HIGH_FEE / 1000:
+            long_warning = (
+                    _('Warning') + ': ' + _("The fee for this transaction seems unusually high.")
+                    + f'\n(feerate: {feerate:.2f} sat/byte)')
+            short_warning = _("high fee rate") + "!"
+        if long_warning is None:
+            return None
+        else:
+            return allow_send, long_warning, short_warning
+
 
 class Simple_Wallet(Abstract_Wallet):
     # wallet with a single keystore
@@ -3023,56 +3165,56 @@ def restore_wallet_from_text(text, *, path, config: SimpleConfig,
     return {'wallet': wallet, 'msg': msg}
 
 
-def check_password_for_directory(config, old_password, new_password=None):
-        """Checks password against all wallets and returns True if they can all be updated.
-        If new_password is not None, update all wallet passwords to new_password.
-        """
-        dirname = os.path.dirname(config.get_wallet_path())
-        failed = []
-        for filename in os.listdir(dirname):
-            path = os.path.join(dirname, filename)
-            if not os.path.isfile(path):
-                continue
-            basename = os.path.basename(path)
-            storage = WalletStorage(path)
-            if not storage.is_encrypted():
-                # it is a bit wasteful load the wallet here, but that is fine
-                # because we are progressively enforcing storage encryption.
-                db = WalletDB(storage.read(), manual_upgrades=False)
-                wallet = Wallet(db, storage, config=config)
-                if wallet.has_keystore_encryption():
-                    try:
-                        wallet.check_password(old_password)
-                    except:
-                        failed.append(basename)
-                        continue
-                    if new_password:
-                        wallet.update_password(old_password, new_password)
-                else:
-                    if new_password:
-                        wallet.update_password(None, new_password)
-                continue
-            if not storage.is_encrypted_with_user_pw():
-                failed.append(basename)
-                continue
-            try:
-                storage.check_password(old_password)
-            except:
-                failed.append(basename)
-                continue
+def check_password_for_directory(config: SimpleConfig, old_password, new_password=None) -> bool:
+    """Checks password against all wallets and returns True if they can all be updated.
+    If new_password is not None, update all wallet passwords to new_password.
+    """
+    dirname = os.path.dirname(config.get_wallet_path())
+    failed = []
+    for filename in os.listdir(dirname):
+        path = os.path.join(dirname, filename)
+        if not os.path.isfile(path):
+            continue
+        basename = os.path.basename(path)
+        storage = WalletStorage(path)
+        if not storage.is_encrypted():
+            # it is a bit wasteful load the wallet here, but that is fine
+            # because we are progressively enforcing storage encryption.
             db = WalletDB(storage.read(), manual_upgrades=False)
             wallet = Wallet(db, storage, config=config)
-            try:
-                wallet.check_password(old_password)
-            except:
-                failed.append(basename)
-                continue
-            if new_password:
-                wallet.update_password(old_password, new_password)
-        return failed == []
+            if wallet.has_keystore_encryption():
+                try:
+                    wallet.check_password(old_password)
+                except:
+                    failed.append(basename)
+                    continue
+                if new_password:
+                    wallet.update_password(old_password, new_password)
+            else:
+                if new_password:
+                    wallet.update_password(None, new_password)
+            continue
+        if not storage.is_encrypted_with_user_pw():
+            failed.append(basename)
+            continue
+        try:
+            storage.check_password(old_password)
+        except:
+            failed.append(basename)
+            continue
+        db = WalletDB(storage.read(), manual_upgrades=False)
+        wallet = Wallet(db, storage, config=config)
+        try:
+            wallet.check_password(old_password)
+        except:
+            failed.append(basename)
+            continue
+        if new_password:
+            wallet.update_password(old_password, new_password)
+    return failed == []
 
 
-def update_password_for_directory(config, old_password, new_password) -> bool:
+def update_password_for_directory(config: SimpleConfig, old_password, new_password) -> bool:
     assert new_password is not None
     assert check_password_for_directory(config, old_password, None)
     return check_password_for_directory(config, old_password, new_password)
