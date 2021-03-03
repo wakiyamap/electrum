@@ -588,8 +588,14 @@ class LedgerPlugin(HW_PluginBase):
                    (0x2581, 0x3b7c), # HW.1 ledger production
                    (0x2581, 0x4b7c), # HW.1 ledger test
                    (0x2c97, 0x0000), # Blue
+                   (0x2c97, 0x0011), # Blue
+                   (0x2c97, 0x0015), # Blue
                    (0x2c97, 0x0001), # Nano-S
+                   (0x2c97, 0x1011), # Nano-S
+                   (0x2c97, 0x1015), # Nano-S
                    (0x2c97, 0x0004), # Nano-X
+                   (0x2c97, 0x4011), # Nano-X
+                   (0x2c97, 0x4015), # Nano-X
                    (0x2c97, 0x0005), # RFU
                    (0x2c97, 0x0006), # RFU
                    (0x2c97, 0x0007), # RFU
