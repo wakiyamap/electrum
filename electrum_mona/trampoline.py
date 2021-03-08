@@ -17,37 +17,37 @@ TRAMPOLINE_FEES = [
     {
         'fee_base_msat': 0,
         'fee_proportional_millionths': 0,
-        'cltv_expiry_delta': 576,
+        'cltv_expiry_delta': 3840,
     },
     {
         'fee_base_msat': 1000,
         'fee_proportional_millionths': 100,
-        'cltv_expiry_delta': 576,
+        'cltv_expiry_delta': 3840,
     },
     {
         'fee_base_msat': 3000,
         'fee_proportional_millionths': 100,
-        'cltv_expiry_delta': 576,
+        'cltv_expiry_delta': 3840,
     },
     {
         'fee_base_msat': 5000,
         'fee_proportional_millionths': 500,
-        'cltv_expiry_delta': 576,
+        'cltv_expiry_delta': 3840,
     },
     {
         'fee_base_msat': 7000,
         'fee_proportional_millionths': 1000,
-        'cltv_expiry_delta': 576,
+        'cltv_expiry_delta': 3840,
     },
     {
         'fee_base_msat': 12000,
         'fee_proportional_millionths': 3000,
-        'cltv_expiry_delta': 576,
+        'cltv_expiry_delta': 3840,
     },
     {
         'fee_base_msat': 100000,
         'fee_proportional_millionths': 3000,
-        'cltv_expiry_delta': 576,
+        'cltv_expiry_delta': 3840,
     },
 ]
 
