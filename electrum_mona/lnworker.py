@@ -78,6 +78,7 @@ from .channel_db import get_mychannel_info, get_mychannel_policy
 from .submarine_swaps import SwapManager
 from .channel_db import ChannelInfo, Policy
 from .mpp_split import suggest_splits
+from .trampoline import create_trampoline_route_and_onion
 
 if TYPE_CHECKING:
     from .network import Network
@@ -105,66 +106,7 @@ FALLBACK_NODE_LIST_MAINNET = [
 ]
 
 
-# hardcoded list
-# TODO for some pubkeys, there are multiple network addresses we could try
-TRAMPOLINE_NODES_MAINNET = {
-    'ACINQ': LNPeerAddr(host='34.239.230.56', port=9735, pubkey=bfh('03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f')),
-    'Electrum trampoline': LNPeerAddr(host='144.76.99.209', port=9740, pubkey=bfh('03ecef675be448b615e6176424070673ef8284e0fd19d8be062a6cb5b130a0a0d1')),
-}
-TRAMPOLINE_NODES_TESTNET = {
-    'endurance': LNPeerAddr(host='34.250.234.192', port=9735, pubkey=bfh('03933884aaf1d6b108397e5efe5c86bcf2d8ca8d2f700eda99db9214fc2712b134')),
-}
-
-def hardcoded_trampoline_nodes():
-    if constants.net in (constants.BitcoinMainnet, ):
-        return TRAMPOLINE_NODES_MAINNET
-    if constants.net in (constants.BitcoinTestnet, ):
-        return TRAMPOLINE_NODES_TESTNET
-    return {}
-
-def trampolines_by_id():
-    return dict([(x.pubkey, x) for x in hardcoded_trampoline_nodes().values()])
-
-is_hardcoded_trampoline = lambda node_id: node_id in trampolines_by_id().keys()
-
-# trampoline nodes are supposed to advertise their fee and cltv in node_update message
-TRAMPOLINE_FEES = [
-    {
-        'fee_base_msat': 0,
-        'fee_proportional_millionths': 0,
-        'cltv_expiry_delta': 576,
-    },
-    {
-        'fee_base_msat': 1000,
-        'fee_proportional_millionths': 100,
-        'cltv_expiry_delta': 576,
-    },
-    {
-        'fee_base_msat': 3000,
-        'fee_proportional_millionths': 100,
-        'cltv_expiry_delta': 576,
-    },
-    {
-        'fee_base_msat': 5000,
-        'fee_proportional_millionths': 500,
-        'cltv_expiry_delta': 576,
-    },
-    {
-        'fee_base_msat': 7000,
-        'fee_proportional_millionths': 1000,
-        'cltv_expiry_delta': 576,
-    },
-    {
-        'fee_base_msat': 12000,
-        'fee_proportional_millionths': 3000,
-        'cltv_expiry_delta': 576,
-    },
-    {
-        'fee_base_msat': 100000,
-        'fee_proportional_millionths': 3000,
-        'cltv_expiry_delta': 576,
-    },
-]
+from .trampoline import trampolines_by_id, hardcoded_trampoline_nodes, is_hardcoded_trampoline
 
 
 class PaymentInfo(NamedTuple):
@@ -234,17 +176,18 @@ class LNWorker(Logger, NetworkRetryManager[LNPeerAddr]):
     def channels_for_peer(self, node_id: bytes) -> Dict[bytes, Channel]:
         return {}
 
-    def get_node_alias(self, node_id: bytes) -> str:
+    def get_node_alias(self, node_id: bytes) -> Optional[str]:
+        """Returns the alias of the node, or None if unknown."""
+        node_alias = None
         if self.channel_db:
             node_info = self.channel_db.get_node_info_for_node_id(node_id)
-            node_alias = (node_info.alias if node_info else '') or node_id.hex()
+            if node_info:
+                node_alias = node_info.alias
         else:
             for k, v in hardcoded_trampoline_nodes().items():
                 if v.pubkey == node_id:
                     node_alias = k
                     break
-            else:
-                node_alias = 'unknown'
         return node_alias
 
     async def maybe_listen(self):
@@ -621,8 +564,9 @@ class LNWallet(LNWorker):
             self._channels[bfh(channel_id)] = Channel(c, sweep_address=self.sweep_address, lnworker=self)
 
         self.sent_htlcs = defaultdict(asyncio.Queue)  # type: Dict[bytes, asyncio.Queue[HtlcLog]]
-        self.received_htlcs = defaultdict(set) # type: Dict[bytes, set]
-        self.htlc_routes = dict()
+        self.sent_htlcs_routes = dict()               # (RHASH, scid, htlc_id) -> route, payment_secret, amount_msat, bucket_msat
+        self.sent_buckets = dict()
+        self.received_htlcs = dict()                  # RHASH -> mpp_status, htlc_set
 
         self.swap_manager = SwapManager(wallet=self.wallet, lnworker=self)
         # detect inflight payments
@@ -903,14 +847,13 @@ class LNWallet(LNWorker):
 
     @log_exceptions
     async def _open_channel_coroutine(
-            self,
-            *,
+            self, *,
             connect_str: str,
             funding_tx: PartialTransaction,
             funding_sat: int,
             push_sat: int,
-            password: Optional[str],
-    ) -> Tuple[Channel, PartialTransaction]:
+            password: Optional[str]) -> Tuple[Channel, PartialTransaction]:
+
         peer = await self.add_peer(connect_str)
         coro = peer.channel_establishment_flow(
             funding_tx=funding_tx,
@@ -978,11 +921,16 @@ class LNWallet(LNWorker):
     def create_routes_from_invoice(self, amount_msat: int, decoded_invoice: LnAddr, *, full_path=None):
         return self.create_routes_for_payment(
             amount_msat=amount_msat,
+            final_total_msat=amount_msat,
             invoice_pubkey=decoded_invoice.pubkey.serialize(),
             min_cltv_expiry=decoded_invoice.get_min_final_cltv_expiry(),
             r_tags=decoded_invoice.get_routing_info('r'),
             t_tags=decoded_invoice.get_routing_info('t'),
             invoice_features=decoded_invoice.get_tag('9') or 0,
+            trampoline_fee_level=0,
+            use_two_trampolines=False,
+            payment_hash=decoded_invoice.paymenthash,
+            payment_secret=decoded_invoice.payment_secret,
             full_path=full_path)
 
     @log_exceptions
@@ -1007,17 +955,13 @@ class LNWallet(LNWorker):
             raise PaymentFailure(_("This invoice has been paid already"))
         if status == PR_INFLIGHT:
             raise PaymentFailure(_("A payment was already initiated for this invoice"))
+        if payment_hash in self.get_payments(status='inflight'):
+            raise PaymentFailure(_("A previous attempt to pay this invoice did not clear"))
         info = PaymentInfo(payment_hash, amount_to_pay, SENT, PR_UNPAID)
         self.save_payment_info(info)
         self.wallet.set_label(key, lnaddr.get_description())
 
-        if self.channel_db is None:
-            self.trampoline_fee_level = 0
-            self.trampoline2_list = list(trampolines_by_id().keys())
-            random.shuffle(self.trampoline2_list)
-
         self.set_invoice_status(key, PR_INFLIGHT)
-        util.trigger_callback('invoice_status', self.wallet, key)
         try:
             await self.pay_to_node(
                 node_pubkey=invoice_pubkey,
@@ -1045,8 +989,7 @@ class LNWallet(LNWorker):
         return success, log
 
     async def pay_to_node(
-            self,
-            *,
+            self, *,
             node_pubkey: bytes,
             payment_hash: bytes,
             payment_secret: Optional[bytes],
@@ -1057,20 +1000,22 @@ class LNWallet(LNWorker):
             invoice_features: int,
             attempts: int = 1,
             full_path: LNPaymentPath = None,
-            trampoline_onion=None,
-            trampoline_fee=None,
-            trampoline_cltv_delta=None,
-    ) -> None:
+            fwd_trampoline_onion=None,
+            fwd_trampoline_fee=None,
+            fwd_trampoline_cltv_delta=None) -> None:
 
-        if trampoline_onion:
+        if fwd_trampoline_onion:
             # todo: compare to the fee of the actual route we found
-            if trampoline_fee < 1000:
+            if fwd_trampoline_fee < 1000:
                 raise OnionRoutingFailure(code=OnionFailureCode.TRAMPOLINE_FEE_INSUFFICIENT, data=b'')
-            if trampoline_cltv_delta < 576:
+            if fwd_trampoline_cltv_delta < 576:
                 raise OnionRoutingFailure(code=OnionFailureCode.TRAMPOLINE_EXPIRY_TOO_SOON, data=b'')
 
         self.logs[payment_hash.hex()] = log = []
-        amount_inflight = 0 # what we sent in htlcs
+        trampoline_fee_level = 0   # only used for trampoline payments
+        use_two_trampolines = True # only used for pay to legacy
+
+        amount_inflight = 0  # what we sent in htlcs (that receiver gets, without fees)
         while True:
             amount_to_send = amount_to_pay - amount_inflight
             if amount_to_send > 0:
@@ -1078,23 +1023,41 @@ class LNWallet(LNWorker):
                 # note: path-finding runs in a separate thread so that we don't block the asyncio loop
                 # graph updates might occur during the computation
                 routes = await run_in_thread(partial(
-                    self.create_routes_for_payment, amount_to_send, node_pubkey,
-                    min_cltv_expiry, r_tags, t_tags, invoice_features, full_path=full_path))
+                    self.create_routes_for_payment,
+                    amount_msat=amount_to_send,
+                    final_total_msat=amount_to_pay,
+                    invoice_pubkey=node_pubkey,
+                    min_cltv_expiry=min_cltv_expiry,
+                    r_tags=r_tags,
+                    t_tags=t_tags,
+                    invoice_features=invoice_features,
+                    full_path=full_path,
+                    payment_hash=payment_hash,
+                    payment_secret=payment_secret,
+                    trampoline_fee_level=trampoline_fee_level,
+                    use_two_trampolines=use_two_trampolines,
+                    fwd_trampoline_onion=fwd_trampoline_onion))
                 # 2. send htlcs
-                for route, amount_msat in routes:
+                for route, amount_msat, total_msat, amount_receiver_msat, cltv_delta, bucket_payment_secret, trampoline_onion in routes:
+                    amount_inflight += amount_receiver_msat
+                    if amount_inflight > amount_to_pay:  # safety belts
+                        raise Exception(f"amount_inflight={amount_inflight} > amount_to_pay={amount_to_pay}")
                     await self.pay_to_route(
-                        route,
+                        route=route,
                         amount_msat=amount_msat,
-                        total_msat=amount_to_pay,
+                        total_msat=total_msat,
+                        amount_receiver_msat=amount_receiver_msat,
                         payment_hash=payment_hash,
-                        payment_secret=payment_secret,
-                        min_cltv_expiry=min_cltv_expiry,
+                        payment_secret=bucket_payment_secret,
+                        min_cltv_expiry=cltv_delta,
                         trampoline_onion=trampoline_onion)
-                    amount_inflight += amount_msat
                 util.trigger_callback('invoice_status', self.wallet, payment_hash.hex())
             # 3. await a queue
+            self.logger.info(f"amount inflight {amount_inflight}")
             htlc_log = await self.sent_htlcs[payment_hash].get()
             amount_inflight -= htlc_log.amount_msat
+            if amount_inflight < 0:
+                raise Exception(f"amount_inflight={amount_inflight} < 0")
             log.append(htlc_log)
             if htlc_log.success:
                 return
@@ -1103,19 +1066,38 @@ class LNWallet(LNWorker):
                 raise PaymentFailure('Giving up after %d attempts'%len(log))
             # if we get a tmp channel failure, it might work to split the amount and try more routes
             # if we get a channel update, we might retry the same route and amount
-            self.handle_error_code_from_failed_htlc(htlc_log)
+            route = htlc_log.route
+            sender_idx = htlc_log.sender_idx
+            failure_msg = htlc_log.failure_msg
+            code, data = failure_msg.code, failure_msg.data
+            self.logger.info(f"UPDATE_FAIL_HTLC {repr(code)} {data}")
+            self.logger.info(f"error reported by {bh2u(route[sender_idx].node_id)}")
+            if code == OnionFailureCode.MPP_TIMEOUT:
+                raise PaymentFailure(failure_msg.code_name())
+            # trampoline
+            if self.channel_db is None:
+                if code == OnionFailureCode.TRAMPOLINE_FEE_INSUFFICIENT:
+                    # todo: parse the node parameters here (not returned by eclair yet)
+                    trampoline_fee_level += 1
+                    continue
+                elif use_two_trampolines:
+                    use_two_trampolines = False
+                else:
+                    raise PaymentFailure(failure_msg.code_name())
+            else:
+                self.handle_error_code_from_failed_htlc(route, sender_idx, failure_msg, code, data)
 
     async def pay_to_route(
-            self,
+            self, *,
             route: LNPaymentRoute,
-            *,
             amount_msat: int,
             total_msat: int,
+            amount_receiver_msat:int,
             payment_hash: bytes,
             payment_secret: Optional[bytes],
             min_cltv_expiry: int,
-            trampoline_onion: bytes = None,
-    ) -> None:
+            trampoline_onion: bytes = None) -> None:
+
         # send a single htlc
         short_channel_id = route[0].short_channel_id
         chan = self.get_channel_by_short_id(short_channel_id)
@@ -1131,32 +1113,19 @@ class LNWallet(LNWorker):
             payment_hash=payment_hash,
             min_final_cltv_expiry=min_cltv_expiry,
             payment_secret=payment_secret,
-            fwd_trampoline_onion=trampoline_onion)
-        self.htlc_routes[(payment_hash, short_channel_id, htlc.htlc_id)] = route
+            trampoline_onion=trampoline_onion)
+
+        key = (payment_hash, short_channel_id, htlc.htlc_id)
+        self.sent_htlcs_routes[key] = route, payment_secret, amount_msat, total_msat, amount_receiver_msat
+        # if we sent MPP to a trampoline, add item to sent_buckets
+        if not self.channel_db and amount_msat != total_msat:
+            if payment_secret not in self.sent_buckets:
+                self.sent_buckets[payment_secret] = 0
+            self.sent_buckets[payment_secret] += amount_receiver_msat
         util.trigger_callback('htlc_added', chan, htlc, SENT)
 
-    def handle_error_code_from_failed_htlc(self, htlc_log):
-        route = htlc_log.route
-        sender_idx = htlc_log.sender_idx
-        failure_msg = htlc_log.failure_msg
-        code, data = failure_msg.code, failure_msg.data
-        self.logger.info(f"UPDATE_FAIL_HTLC {repr(code)} {data}")
-        self.logger.info(f"error reported by {bh2u(route[sender_idx].node_id)}")
-        if code == OnionFailureCode.MPP_TIMEOUT:
-            raise PaymentFailure(failure_msg.code_name())
-        # trampoline
-        if self.channel_db is None:
-            if code == OnionFailureCode.TRAMPOLINE_FEE_INSUFFICIENT:
-                # todo: parse the node parameters here (not returned by eclair yet)
-                self.trampoline_fee_level += 1
-                return
-            elif len(route) > 2:
-                edge = route[2]
-                if edge.is_trampoline() and edge.node_id in self.trampoline2_list:
-                    self.logger.info(f"blacklisting second trampoline {edge.node_id.hex()}")
-                    self.trampoline2_list.remove(edge.node_id)
-                    return
-            raise PaymentFailure(failure_msg.code_name())
+
+    def handle_error_code_from_failed_htlc(self, route, sender_idx, failure_msg, code, data):
         # handle some specific error codes
         failure_codes = {
             OnionFailureCode.TEMPORARY_CHANNEL_FAILURE: 0,
@@ -1190,8 +1159,8 @@ class LNWallet(LNWorker):
                     # maybe it is a private channel (and data in invoice was outdated)
                     self.logger.info(f"Could not find {short_channel_id}. maybe update is for private channel?")
                     start_node_id = route[sender_idx].node_id
-                    self.channel_db.add_channel_update_for_private_channel(payload, start_node_id)
-                    #update = True  # FIXME: we need to check if we actually updated something
+                    update = self.channel_db.add_channel_update_for_private_channel(payload, start_node_id)
+                    blacklist = not update
                 elif r == UpdateStatus.EXPIRED:
                     blacklist = True
                 elif r == UpdateStatus.DEPRECATED:
@@ -1206,8 +1175,8 @@ class LNWallet(LNWorker):
             # blacklist channel after reporter node
             # TODO this should depend on the error (even more granularity)
             # also, we need finer blacklisting (directed edges; nodes)
-            if htlc_log.sender_idx is None:
-                raise PaymentFailure(htlc_log.failure_msg.code_name())
+            if sender_idx is None:
+                raise PaymentFailure(failure_msg.code_name())
             try:
                 short_chan_id = route[sender_idx + 1].short_channel_id
             except IndexError:
@@ -1219,7 +1188,7 @@ class LNWallet(LNWorker):
 
         # we should not continue if we did not blacklist or update anything
         if not (blacklist or update):
-            raise PaymentFailure(htlc_log.failure_msg.code_name())
+            raise PaymentFailure(failure_msg.code_name())
 
     @classmethod
     def _decode_channel_update_msg(cls, chan_upd_msg: bytes) -> Optional[Dict[str, Any]]:
@@ -1259,16 +1228,6 @@ class LNWallet(LNWorker):
                 f"min_final_cltv_expiry: {addr.get_min_final_cltv_expiry()}"))
         return addr
 
-    def encode_routing_info(self, r_tags):
-        import bitstring
-        result = bitstring.BitArray()
-        for route in r_tags:
-            result.append(bitstring.pack('uint:8', len(route)))
-            for step in route:
-                pubkey, channel, feebase, feerate, cltv = step
-                result.append(bitstring.BitArray(pubkey) + bitstring.BitArray(channel) + bitstring.pack('intbe:32', feebase) + bitstring.pack('intbe:32', feerate) + bitstring.pack('intbe:16', cltv))
-        return result.tobytes()
-
     def is_trampoline_peer(self, node_id: bytes) -> bool:
         # until trampoline is advertised in lnfeatures, check against hardcoded list
         if is_hardcoded_trampoline(node_id):
@@ -1284,178 +1243,158 @@ class LNWallet(LNWorker):
         else:
             return random.choice(list(hardcoded_trampoline_nodes().values())).pubkey
 
-    def create_trampoline_route(
-            self, amount_msat:int,
-            min_cltv_expiry:int,
-            invoice_pubkey:bytes,
-            invoice_features:int,
-            channels: List[Channel],
-            r_tags, t_tags) -> LNPaymentRoute:
-        """ return the route that leads to trampoline, and the trampoline fake edge"""
-
-        invoice_features = LnFeatures(invoice_features)
-
-        # We do not set trampoline_routing_opt in our invoices, because the spec is not ready
-        # Do not use t_tags if the flag is set, because we the format is not decided yet
-        if invoice_features.supports(LnFeatures.OPTION_TRAMPOLINE_ROUTING_OPT):
-            is_legacy = False
-            if len(r_tags) > 0 and len(r_tags[0]) == 1:
-                pubkey, scid, feebase, feerate, cltv = r_tags[0][0]
-                t_tag = pubkey, feebase, feerate, cltv
-            else:
-                t_tag = None
-        elif len(t_tags) > 0:
-            is_legacy = False
-            t_tag = t_tags[0]
-        else:
-            is_legacy = True
-
-        # fee level. the same fee is used for all trampolines
-        if self.trampoline_fee_level < len(TRAMPOLINE_FEES):
-            params = TRAMPOLINE_FEES[self.trampoline_fee_level]
-        else:
-            raise NoPathFound()
-        # Find a trampoline. We assume we have a direct channel to trampoline
-        for chan in channels:
-            if not self.is_trampoline_peer(chan.node_id):
-                continue
-            trampoline_short_channel_id = chan.short_channel_id
-            trampoline_node_id = chan.node_id
-            # use attempt number to decide fee and second trampoline
-            # we need a state with the list of nodes we have not tried
-            # add optional second trampoline
-            trampoline2 = None
-            if is_legacy:
-                for node_id in self.trampoline2_list:
-                    if node_id != trampoline_node_id:
-                        trampoline2 = node_id
-                        break
-            # node_features is only used to determine is_tlv
-            trampoline_features = LnFeatures.VAR_ONION_OPT
-            # hop to trampoline
-            route = [
-                RouteEdge(
-                    node_id=trampoline_node_id,
-                    short_channel_id=trampoline_short_channel_id,
-                    fee_base_msat=0,
-                    fee_proportional_millionths=0,
-                    cltv_expiry_delta=0,
-                    node_features=trampoline_features)
-            ]
-            # trampoline hop
-            route.append(
-                TrampolineEdge(
-                    node_id=trampoline_node_id,
-                    fee_base_msat=params['fee_base_msat'],
-                    fee_proportional_millionths=params['fee_proportional_millionths'],
-                    cltv_expiry_delta=params['cltv_expiry_delta'],
-                    node_features=trampoline_features))
-            if trampoline2:
-                route.append(
-                    TrampolineEdge(
-                        node_id=trampoline2,
-                        fee_base_msat=params['fee_base_msat'],
-                        fee_proportional_millionths=params['fee_proportional_millionths'],
-                        cltv_expiry_delta=params['cltv_expiry_delta'],
-                        node_features=trampoline_features))
-            # add routing info
-            if is_legacy:
-                invoice_routing_info = self.encode_routing_info(r_tags)
-                route[-1].invoice_routing_info = invoice_routing_info
-                route[-1].invoice_features = invoice_features
-            else:
-                if t_tag:
-                    pubkey, feebase, feerate, cltv = t_tag
-                    if route[-1].node_id != pubkey:
-                        route.append(
-                            TrampolineEdge(
-                                node_id=pubkey,
-                                fee_base_msat=feebase,
-                                fee_proportional_millionths=feerate,
-                                cltv_expiry_delta=cltv,
-                                node_features=trampoline_features))
-            # Fake edge (not part of actual route, needed by calc_hops_data)
-            route.append(
-                TrampolineEdge(
-                    node_id=invoice_pubkey,
-                    fee_base_msat=0,
-                    fee_proportional_millionths=0,
-                    cltv_expiry_delta=0,
-                    node_features=trampoline_features))
-            # check that we can pay amount and fees
-            for edge in route[::-1]:
-                amount_msat += edge.fee_for_edge(amount_msat)
-            if not chan.can_pay(amount_msat, check_frozen=True):
-                continue
-            if not is_route_sane_to_use(route, amount_msat, min_cltv_expiry):
-                continue
-            break
-        else:
-            raise NoPathFound()
-        self.logger.info(f'created route with trampoline: fee_level={self.trampoline_fee_level}, is legacy: {is_legacy}')
-        self.logger.info(f'first trampoline: {trampoline_node_id.hex()}')
-        self.logger.info(f'second trampoline: {trampoline2.hex() if trampoline2 else None}')
-        self.logger.info(f'params: {params}')
-        return route
-
     @profiler
     def create_routes_for_payment(
-            self,
-            amount_msat: int,
+            self, *,
+            amount_msat: int,        # part of payment amount we want routes for now
+            final_total_msat: int,   # total payment amount final receiver will get
             invoice_pubkey,
             min_cltv_expiry,
             r_tags, t_tags,
             invoice_features: int,
-            *,
-            full_path: LNPaymentPath = None,
-    ) -> Sequence[Tuple[LNPaymentRoute, int]]:
+            payment_hash,
+            payment_secret,
+            trampoline_fee_level: int,
+            use_two_trampolines: bool,
+            fwd_trampoline_onion = None,
+            full_path: LNPaymentPath = None) -> Sequence[Tuple[LNPaymentRoute, int]]:
+
         """Creates multiple routes for splitting a payment over the available
         private channels.
 
         We first try to conduct the payment over a single channel. If that fails
         and mpp is supported by the receiver, we will split the payment."""
+        # It could happen that the pathfinding uses a channel
+        # in the graph multiple times, meaning we could exhaust
+        # its capacity. This could be dealt with by temporarily
+        # iteratively blacklisting channels for this mpp attempt.
         invoice_features = LnFeatures(invoice_features)
-        # try to send over a single channel
+        trampoline_features = LnFeatures.VAR_ONION_OPT
+        local_height = self.network.get_local_height()
         try:
-            routes = [self.create_route_for_payment(
-                amount_msat=amount_msat,
-                invoice_pubkey=invoice_pubkey,
-                min_cltv_expiry=min_cltv_expiry,
-                r_tags=r_tags,
-                t_tags=t_tags,
-                invoice_features=invoice_features,
-                outgoing_channel=None,
-                full_path=full_path,
-            )]
+            # try to send over a single channel
+            if not self.channel_db:
+                for chan in self.channels.values():
+                    if not self.is_trampoline_peer(chan.node_id):
+                        continue
+                    if chan.is_frozen_for_sending():
+                        continue
+                    trampoline_onion, amount_with_fees, cltv_delta = create_trampoline_route_and_onion(
+                        amount_msat=amount_msat,
+                        total_msat=final_total_msat,
+                        min_cltv_expiry=min_cltv_expiry,
+                        my_pubkey=self.node_keypair.pubkey,
+                        invoice_pubkey=invoice_pubkey,
+                        invoice_features=invoice_features,
+                        node_id=chan.node_id,
+                        r_tags=r_tags,
+                        t_tags=t_tags,
+                        payment_hash=payment_hash,
+                        payment_secret=payment_secret,
+                        local_height=local_height,
+                        trampoline_fee_level=trampoline_fee_level,
+                        use_two_trampolines=use_two_trampolines)
+                    trampoline_payment_secret = os.urandom(32)
+                    if chan.available_to_spend(LOCAL, strict=True) < amount_with_fees:
+                        continue
+                    route = [
+                        RouteEdge(
+                            start_node=self.node_keypair.pubkey,
+                            end_node=chan.node_id,
+                            short_channel_id=chan.short_channel_id,
+                            fee_base_msat=0,
+                            fee_proportional_millionths=0,
+                            cltv_expiry_delta=0,
+                            node_features=trampoline_features)
+                    ]
+                    routes = [(route, amount_with_fees, amount_with_fees, amount_msat, cltv_delta, trampoline_payment_secret, trampoline_onion)]
+                    break
+                else:
+                    raise NoPathFound()
+            else:
+                route = self.create_route_for_payment(
+                    amount_msat=amount_msat,
+                    invoice_pubkey=invoice_pubkey,
+                    min_cltv_expiry=min_cltv_expiry,
+                    r_tags=r_tags, t_tags=t_tags,
+                    invoice_features=invoice_features,
+                    outgoing_channel=None, full_path=full_path)
+                routes = [(route, amount_msat, final_total_msat, amount_msat, min_cltv_expiry, payment_secret, fwd_trampoline_onion)]
         except NoPathFound:
             if not invoice_features.supports(LnFeatures.BASIC_MPP_OPT):
                 raise
             channels_with_funds = dict([
                 (cid, int(chan.available_to_spend(HTLCOwner.LOCAL)))
-                for cid, chan in self._channels.items()])
+                for cid, chan in self._channels.items() if not chan.is_frozen_for_sending()])
+            self.logger.info(f"channels_with_funds: {channels_with_funds}")
             # Create split configurations that are rated according to our
             # preference -funds = (low rating=high preference).
             split_configurations = suggest_splits(amount_msat, channels_with_funds)
+            self.logger.info(f'suggest_split {amount_msat} returned {len(split_configurations)} configurations')
             for s in split_configurations:
+                self.logger.info(f"trying split configuration: {s[0].values()} rating: {s[1]}")
                 routes = []
                 try:
-                    for chanid, part_amount_msat in s[0].items():
-                        if part_amount_msat:
-                            channel = self.channels[chanid]
-                            # It could happen that the pathfinding uses a channel
-                            # in the graph multiple times, meaning we could exhaust
-                            # its capacity. This could be dealt with by temporarily
-                            # iteratively blacklisting channels for this mpp attempt.
-                            route, amt = self.create_route_for_payment(
-                                amount_msat=part_amount_msat,
-                                invoice_pubkey=invoice_pubkey,
+                    if not self.channel_db:
+                        buckets = defaultdict(list)
+                        for chan_id, part_amount_msat in s[0].items():
+                            chan = self.channels[chan_id]
+                            if part_amount_msat:
+                                buckets[chan.node_id].append((chan_id, part_amount_msat))
+                        for node_id, bucket in buckets.items():
+                            bucket_amount_msat = sum([x[1] for x in bucket])
+                            trampoline_onion, bucket_amount_with_fees, bucket_cltv_delta = create_trampoline_route_and_onion(
+                                amount_msat=bucket_amount_msat,
+                                total_msat=final_total_msat,
                                 min_cltv_expiry=min_cltv_expiry,
+                                my_pubkey=self.node_keypair.pubkey,
+                                invoice_pubkey=invoice_pubkey,
+                                invoice_features=invoice_features,
+                                node_id=node_id,
                                 r_tags=r_tags,
                                 t_tags=t_tags,
-                                invoice_features=invoice_features,
-                                outgoing_channel=channel,
-                                full_path=None)
-                            routes.append((route, amt))
+                                payment_hash=payment_hash,
+                                payment_secret=payment_secret,
+                                local_height=local_height,
+                                trampoline_fee_level=trampoline_fee_level,
+                                use_two_trampolines=use_two_trampolines)
+                            # node_features is only used to determine is_tlv
+                            bucket_payment_secret = os.urandom(32)
+                            bucket_fees = bucket_amount_with_fees - bucket_amount_msat
+                            self.logger.info(f'bucket_fees {bucket_fees}')
+                            for chan_id, part_amount_msat in bucket:
+                                chan = self.channels[chan_id]
+                                margin = chan.available_to_spend(LOCAL, strict=True) - part_amount_msat
+                                delta_fee = min(bucket_fees, margin)
+                                part_amount_msat_with_fees = part_amount_msat + delta_fee
+                                bucket_fees -= delta_fee
+                                route = [
+                                    RouteEdge(
+                                        start_node=self.node_keypair.pubkey,
+                                        end_node=node_id,
+                                        short_channel_id=chan.short_channel_id,
+                                        fee_base_msat=0,
+                                        fee_proportional_millionths=0,
+                                        cltv_expiry_delta=0,
+                                        node_features=trampoline_features)
+                                ]
+                                self.logger.info(f'adding route {part_amount_msat} {delta_fee} {margin}')
+                                routes.append((route, part_amount_msat_with_fees, bucket_amount_with_fees, part_amount_msat, bucket_cltv_delta, bucket_payment_secret, trampoline_onion))
+                            if bucket_fees != 0:
+                                self.logger.info('not enough margin to pay trampoline fee')
+                                raise NoPathFound()
+                    else:
+                        for chan_id, part_amount_msat in s[0].items():
+                            if part_amount_msat:
+                                channel = self.channels[chan_id]
+                                route = self.create_route_for_payment(
+                                    amount_msat=part_amount_msat,
+                                    invoice_pubkey=invoice_pubkey,
+                                    min_cltv_expiry=min_cltv_expiry,
+                                    r_tags=r_tags, t_tags=t_tags,
+                                    invoice_features=invoice_features,
+                                    outgoing_channel=channel, full_path=None)
+                                routes.append((route, part_amount_msat, final_total_msat, part_amount_msat, min_cltv_expiry, payment_secret, fwd_trampoline_onion))
                     self.logger.info(f"found acceptable split configuration: {list(s[0].values())} rating: {s[1]}")
                     break
                 except NoPathFound:
@@ -1465,97 +1404,79 @@ class LNWallet(LNWorker):
         return routes
 
     def create_route_for_payment(
-            self,
-            *,
+            self, *,
             amount_msat: int,
             invoice_pubkey: bytes,
             min_cltv_expiry: int,
-            r_tags,
-            t_tags,
+            r_tags, t_tags,
             invoice_features: int,
             outgoing_channel: Channel = None,
-            full_path: Optional[LNPaymentPath],
-    ) -> Tuple[LNPaymentRoute, int]:
+            full_path: Optional[LNPaymentPath]) -> Tuple[LNPaymentRoute, int]:
 
         channels = [outgoing_channel] if outgoing_channel else list(self.channels.values())
-        if not self.channel_db:
-            route = self.create_trampoline_route(
-                amount_msat, min_cltv_expiry, invoice_pubkey, invoice_features, channels, r_tags, t_tags)
-            return route, amount_msat
-
-        route = None
         scid_to_my_channels = {
             chan.short_channel_id: chan for chan in channels
             if chan.short_channel_id is not None
         }
         blacklist = self.network.channel_blacklist.get_current_list()
-        # first try with routing hints, then without
-        for private_path in r_tags + [[]]:
-            private_route = []
-            amount_for_node = amount_msat
-            path = full_path
-            if len(private_path) > NUM_MAX_EDGES_IN_PAYMENT_PATH:
-                continue
-            if len(private_path) == 0:
-                border_node_pubkey = invoice_pubkey
-            else:
-                border_node_pubkey = private_path[0][0]
-                # we need to shift the node pubkey by one towards the destination:
-                private_path_nodes = [edge[0] for edge in private_path][1:] + [invoice_pubkey]
-                private_path_rest = [edge[1:] for edge in private_path]
-                prev_node_id = border_node_pubkey
-                for node_pubkey, edge_rest in zip(private_path_nodes, private_path_rest):
-                    short_channel_id, fee_base_msat, fee_proportional_millionths, cltv_expiry_delta = edge_rest
-                    short_channel_id = ShortChannelID(short_channel_id)
-                    # if we have a routing policy for this edge in the db, that takes precedence,
-                    # as it is likely from a previous failure
-                    channel_policy = self.channel_db.get_policy_for_node(
+        # Collect all private edges from route hints.
+        # Note: if some route hints are multiple edges long, and these paths cross each other,
+        #       we allow our path finding to cross the paths; i.e. the route hints are not isolated.
+        private_route_edges = {}  # type: Dict[ShortChannelID, RouteEdge]
+        for private_path in r_tags:
+            # we need to shift the node pubkey by one towards the destination:
+            private_path_nodes = [edge[0] for edge in private_path][1:] + [invoice_pubkey]
+            private_path_rest = [edge[1:] for edge in private_path]
+            start_node = private_path[0][0]
+            for end_node, edge_rest in zip(private_path_nodes, private_path_rest):
+                short_channel_id, fee_base_msat, fee_proportional_millionths, cltv_expiry_delta = edge_rest
+                short_channel_id = ShortChannelID(short_channel_id)
+                # if we have a routing policy for this edge in the db, that takes precedence,
+                # as it is likely from a previous failure
+                channel_policy = self.channel_db.get_policy_for_node(
+                    short_channel_id=short_channel_id,
+                    node_id=start_node,
+                    my_channels=scid_to_my_channels)
+                if channel_policy:
+                    fee_base_msat = channel_policy.fee_base_msat
+                    fee_proportional_millionths = channel_policy.fee_proportional_millionths
+                    cltv_expiry_delta = channel_policy.cltv_expiry_delta
+                node_info = self.channel_db.get_node_info_for_node_id(node_id=end_node)
+                route_edge = RouteEdge(
+                        start_node=start_node,
+                        end_node=end_node,
                         short_channel_id=short_channel_id,
-                        node_id=prev_node_id,
-                        my_channels=scid_to_my_channels)
-                    if channel_policy:
-                        fee_base_msat = channel_policy.fee_base_msat
-                        fee_proportional_millionths = channel_policy.fee_proportional_millionths
-                        cltv_expiry_delta = channel_policy.cltv_expiry_delta
-                    node_info = self.channel_db.get_node_info_for_node_id(node_id=node_pubkey)
-                    private_route.append(
-                        RouteEdge(
-                            node_id=node_pubkey,
-                            short_channel_id=short_channel_id,
-                            fee_base_msat=fee_base_msat,
-                            fee_proportional_millionths=fee_proportional_millionths,
-                            cltv_expiry_delta=cltv_expiry_delta,
-                            node_features=node_info.features if node_info else 0))
-                    prev_node_id = node_pubkey
-                for edge in private_route[::-1]:
-                    amount_for_node += edge.fee_for_edge(amount_for_node)
-                if full_path:
-                    # user pre-selected path. check that end of given path coincides with private_route:
-                    if [edge.short_channel_id for edge in full_path[-len(private_path):]] != [edge[1] for edge in private_path]:
-                        continue
-                    path = full_path[:-len(private_path)]
-            try:
-                route = self.network.path_finder.find_route(
-                    self.node_keypair.pubkey, border_node_pubkey, amount_for_node,
-                    path=path, my_channels=scid_to_my_channels, blacklist=blacklist)
-            except NoChannelPolicy:
-                continue
-            if not route:
-                continue
-            route = route + private_route
-            # test sanity
-            if not is_route_sane_to_use(route, amount_msat, min_cltv_expiry):
-                self.logger.info(f"rejecting insane route {route}")
-                continue
-            break
-        else:
+                        fee_base_msat=fee_base_msat,
+                        fee_proportional_millionths=fee_proportional_millionths,
+                        cltv_expiry_delta=cltv_expiry_delta,
+                        node_features=node_info.features if node_info else 0)
+                if route_edge.short_channel_id not in blacklist:
+                    private_route_edges[route_edge.short_channel_id] = route_edge
+                start_node = end_node
+        # now find a route, end to end: between us and the recipient
+        try:
+            route = self.network.path_finder.find_route(
+                nodeA=self.node_keypair.pubkey,
+                nodeB=invoice_pubkey,
+                invoice_amount_msat=amount_msat,
+                path=full_path,
+                my_channels=scid_to_my_channels,
+                blacklist=blacklist,
+                private_route_edges=private_route_edges)
+        except NoChannelPolicy as e:
+            raise NoPathFound() from e
+        if not route:
+            raise NoPathFound()
+        # test sanity
+        if not is_route_sane_to_use(route, amount_msat, min_cltv_expiry):
+            self.logger.info(f"rejecting insane route {route}")
             raise NoPathFound()
         assert len(route) > 0
-        if route[-1].node_id != invoice_pubkey:
+        if route[-1].end_node != invoice_pubkey:
             raise LNPathInconsistent("last node_id != invoice pubkey")
         # add features from invoice
         route[-1].node_features |= invoice_features
-        return route, amount_msat
+        return route
 
     def add_request(self, amount_sat, message, expiry) -> str:
         coro = self._add_request_coro(amount_sat, message, expiry)
@@ -1567,43 +1488,42 @@ class LNWallet(LNWorker):
 
     @log_exceptions
     async def create_invoice(
-            self,
-            *,
+            self, *,
             amount_msat: Optional[int],
-            message,
-            expiry: int,
-    ) -> Tuple[LnAddr, str]:
+            message: str,
+            expiry: int) -> Tuple[LnAddr, str]:
+
         timestamp = int(time.time())
         routing_hints = await self._calc_routing_hints_for_invoice(amount_msat)
         if not routing_hints:
-            self.logger.info("Warning. No routing hints added to invoice. "
-                             "Other clients will likely not be able to send to us.")
-
+            self.logger.info(
+                "Warning. No routing hints added to invoice. "
+                "Other clients will likely not be able to send to us.")
         # if not all hints are trampoline, do not create trampoline invoice
         invoice_features = self.features.for_invoice()
-        #
         trampoline_hints = []
         for r in routing_hints:
             node_id, short_channel_id, fee_base_msat, fee_proportional_millionths, cltv_expiry_delta = r[1][0]
             if len(r[1])== 1 and self.is_trampoline_peer(node_id):
                 trampoline_hints.append(('t', (node_id, fee_base_msat, fee_proportional_millionths, cltv_expiry_delta)))
-
         payment_preimage = os.urandom(32)
         payment_hash = sha256(payment_preimage)
         info = PaymentInfo(payment_hash, amount_msat, RECEIVED, PR_UNPAID)
         amount_btc = amount_msat/Decimal(COIN*1000) if amount_msat else None
         if expiry == 0:
             expiry = LN_EXPIRY_NEVER
-        lnaddr = LnAddr(paymenthash=payment_hash,
-                        amount=amount_btc,
-                        tags=[('d', message),
-                              ('c', MIN_FINAL_CLTV_EXPIRY_FOR_INVOICE),
-                              ('x', expiry),
-                              ('9', invoice_features)]
-                        + routing_hints
-                        + trampoline_hints,
-                        date=timestamp,
-                        payment_secret=derive_payment_secret_from_payment_preimage(payment_preimage))
+        lnaddr = LnAddr(
+            paymenthash=payment_hash,
+            amount=amount_btc,
+            tags=[
+                ('d', message),
+                ('c', MIN_FINAL_CLTV_EXPIRY_FOR_INVOICE),
+                ('x', expiry),
+                ('9', invoice_features)]
+            + routing_hints
+            + trampoline_hints,
+            date=timestamp,
+            payment_secret=derive_payment_secret_from_payment_preimage(payment_preimage))
         invoice = lnencode(lnaddr, self.node_keypair.privkey)
         self.save_preimage(payment_hash, payment_preimage)
         self.save_payment_info(info)
@@ -1614,8 +1534,7 @@ class LNWallet(LNWorker):
         lnaddr, invoice = await self.create_invoice(
             amount_msat=amount_msat,
             message=message,
-            expiry=expiry,
-        )
+            expiry=expiry)
         key = bh2u(lnaddr.paymenthash)
         req = LNInvoice.from_bech32(invoice)
         self.wallet.add_payment_request(req)
@@ -1646,24 +1565,34 @@ class LNWallet(LNWorker):
             self.payments[key] = info.amount_msat, info.direction, info.status
         self.wallet.save_db()
 
-    def htlc_received(self, short_channel_id, htlc: UpdateAddHtlc, expected_msat: int):
-        status = self.get_payment_status(htlc.payment_hash)
-        if status == PR_PAID:
-            return True, None
-        s = self.received_htlcs[htlc.payment_hash]
-        if (short_channel_id, htlc) not in s:
-            s.add((short_channel_id, htlc))
-        total = sum([htlc.amount_msat for scid, htlc in s])
-        first_timestamp = min([htlc.timestamp for scid, htlc in s])
-        expired = time.time() - first_timestamp > MPP_EXPIRY
-        if total == expected_msat and not expired:
-            # status must be persisted
-            self.set_payment_status(htlc.payment_hash, PR_PAID)
-            util.trigger_callback('request_status', self.wallet, htlc.payment_hash.hex(), PR_PAID)
-            return True, None
-        if expired:
-            return None, True
-        return None, None
+    def add_received_htlc(self, payment_secret, short_channel_id, htlc: UpdateAddHtlc, expected_msat: int) -> Optional[bool]:
+        """ return MPP status: True (accepted), False (expired) or None """
+        payment_hash = htlc.payment_hash
+        is_expired, is_accepted, htlc_set = self.received_htlcs.get(payment_secret, (False, False, set()))
+        if self.get_payment_status(payment_hash) == PR_PAID:
+            # payment_status is persisted
+            is_accepted = True
+            is_expired = False
+        key = (short_channel_id, htlc)
+        if key not in htlc_set:
+            htlc_set.add(key)
+        if not is_accepted and not is_expired:
+            total = sum([_htlc.amount_msat for scid, _htlc in htlc_set])
+            first_timestamp = min([_htlc.timestamp for scid, _htlc in htlc_set])
+            if time.time() - first_timestamp > MPP_EXPIRY:
+                is_expired = True
+            elif total == expected_msat:
+                is_accepted = True
+                if self.get_payment_info(payment_hash) is not None:
+                    self.set_payment_status(payment_hash, PR_PAID)
+                    util.trigger_callback('request_status', self.wallet, payment_hash.hex(), PR_PAID)
+        if is_accepted or is_expired:
+            htlc_set.remove(key)
+        if len(htlc_set) > 0:
+            self.received_htlcs[payment_secret] = is_expired, is_accepted, htlc_set
+        elif payment_secret in self.received_htlcs:
+            self.received_htlcs.pop(payment_secret)
+        return True if is_accepted else (False if is_expired else None)
 
     def get_payment_status(self, payment_hash):
         info = self.get_payment_info(payment_hash)
@@ -1687,6 +1616,7 @@ class LNWallet(LNWorker):
             self.inflight_payments.remove(key)
         if status in SAVED_PR_STATUS:
             self.set_payment_status(bfh(key), status)
+        util.trigger_callback('invoice_status', self.wallet, key)
 
     def set_payment_status(self, payment_hash: bytes, status):
         info = self.get_payment_info(payment_hash)
@@ -1696,74 +1626,85 @@ class LNWallet(LNWorker):
         info = info._replace(status=status)
         self.save_payment_info(info)
 
-    def htlc_fulfilled(self, chan, payment_hash: bytes, htlc_id:int, amount_msat:int):
-        route = self.htlc_routes.get((payment_hash, chan.short_channel_id, htlc_id))
-        htlc_log = HtlcLog(
-            success=True,
-            route=route,
-            amount_msat=amount_msat)
-        q = self.sent_htlcs[payment_hash]
-        q.put_nowait(htlc_log)
+    def htlc_fulfilled(self, chan, payment_hash: bytes, htlc_id:int):
         util.trigger_callback('htlc_fulfilled', payment_hash, chan.channel_id)
+        q = self.sent_htlcs.get(payment_hash)
+        if q:
+            route, payment_secret, amount_msat, bucket_msat, amount_receiver_msat = self.sent_htlcs_routes[(payment_hash, chan.short_channel_id, htlc_id)]
+            htlc_log = HtlcLog(
+                success=True,
+                route=route,
+                amount_msat=amount_receiver_msat)
+            q.put_nowait(htlc_log)
+        else:
+            key = payment_hash.hex()
+            self.set_invoice_status(key, PR_PAID)
+            util.trigger_callback('payment_succeeded', self.wallet, key)
 
     def htlc_failed(
             self,
-            chan,
+            chan: Channel,
             payment_hash: bytes,
             htlc_id: int,
-            amount_msat:int,
             error_bytes: Optional[bytes],
             failure_message: Optional['OnionRoutingFailure']):
 
-        route = self.htlc_routes.get((payment_hash, chan.short_channel_id, htlc_id))
-        if not route:
-            self.logger.info(f"received unknown htlc_failed, probably from previous session")
-            return
-        if error_bytes:
-            self.logger.info(f" {(error_bytes, route, htlc_id)}")
-            # TODO "decode_onion_error" might raise, catch and maybe blacklist/penalise someone?
-            try:
-                failure_message, sender_idx = chan.decode_onion_error(error_bytes, route, htlc_id)
-            except Exception as e:
-                sender_idx = None
-                failure_message = OnionRoutingFailure(-1, str(e))
-        else:
-            # probably got "update_fail_malformed_htlc". well... who to penalise now?
-            assert failure_message is not None
-            sender_idx = None
-
-        htlc_log = HtlcLog(
-            success=False,
-            route=route,
-            amount_msat=amount_msat,
-            error_bytes=error_bytes,
-            failure_msg=failure_message,
-            sender_idx=sender_idx)
-
-        q = self.sent_htlcs[payment_hash]
-        q.put_nowait(htlc_log)
         util.trigger_callback('htlc_failed', payment_hash, chan.channel_id)
+        q = self.sent_htlcs.get(payment_hash)
+        if q:
+            # detect if it is part of a bucket
+            # if yes, wait until the bucket completely failed
+            key = (payment_hash, chan.short_channel_id, htlc_id)
+            route, payment_secret, amount_msat, bucket_msat, amount_receiver_msat = self.sent_htlcs_routes[key]
+            if error_bytes:
+                # TODO "decode_onion_error" might raise, catch and maybe blacklist/penalise someone?
+                try:
+                    failure_message, sender_idx = chan.decode_onion_error(error_bytes, route, htlc_id)
+                except Exception as e:
+                    sender_idx = None
+                    failure_message = OnionRoutingFailure(-1, str(e))
+            else:
+                # probably got "update_fail_malformed_htlc". well... who to penalise now?
+                assert failure_message is not None
+                sender_idx = None
+            self.logger.info(f"htlc_failed {failure_message}")
 
+            # check sent_buckets if we use trampoline
+            if self.channel_db is None and payment_secret in self.sent_buckets:
+                self.sent_buckets[payment_secret] -= amount_receiver_msat
+                if self.sent_buckets[payment_secret] > 0:
+                    return
+                assert self.sent_buckets[payment_secret] == 0
 
+            htlc_log = HtlcLog(
+                success=False,
+                route=route,
+                amount_msat=amount_receiver_msat,
+                error_bytes=error_bytes,
+                failure_msg=failure_message,
+                sender_idx=sender_idx)
+            q.put_nowait(htlc_log)
+        else:
+            self.logger.info(f"received unknown htlc_failed, probably from previous session")
+            key = payment_hash.hex()
+            self.set_invoice_status(key, PR_UNPAID)
+            util.trigger_callback('payment_failed', self.wallet, key, '')
 
     async def _calc_routing_hints_for_invoice(self, amount_msat: Optional[int]):
         """calculate routing hints (BOLT-11 'r' field)"""
         routing_hints = []
         channels = list(self.channels.values())
-        random.shuffle(channels)  # not sure this has any benefit but let's not leak channel order
+        # do minimal filtering of channels.
+        # we include channels that cannot *right now* receive (e.g. peer disconnected or balance insufficient)
+        channels = [chan for chan in channels
+                    if (chan.is_open() and not chan.is_frozen_for_receiving())]
+        # cap max channels to include to keep QR code reasonably scannable
+        channels = sorted(channels, key=lambda chan: (not chan.is_active(), -chan.available_to_spend(REMOTE)))
+        channels = channels[:15]
+        random.shuffle(channels)  # let's not leak channel order
         scid_to_my_channels = {chan.short_channel_id: chan for chan in channels
                                if chan.short_channel_id is not None}
-        if not amount_msat:
-            # for no amt invoices, check if channel can receive at least 1 msat
-            amount_msat = 1
-        # note: currently we add *all* our channels; but this might be a privacy leak?
         for chan in channels:
-            # do minimal filtering of channels.
-            # we include channels that cannot *right now* receive (e.g. peer disconnected or balance insufficient)
-            if not (chan.is_open() and not chan.is_frozen_for_receiving()):
-                continue
-            if amount_msat > 1000 * chan.constraints.capacity:
-                continue
             chan_id = chan.short_channel_id
             assert isinstance(chan_id, bytes), chan_id
             channel_info = get_mychannel_info(chan_id, scid_to_my_channels)
@@ -1783,13 +1724,15 @@ class LNWallet(LNWorker):
                     cltv_expiry_delta = policy.cltv_expiry_delta
                     missing_info = False
             if missing_info:
-                self.logger.info(f"Warning. Missing channel update for our channel {chan_id}; "
-                                 f"filling invoice with incorrect data.")
-            routing_hints.append(('r', [(chan.node_id,
-                                         chan_id,
-                                         fee_base_msat,
-                                         fee_proportional_millionths,
-                                         cltv_expiry_delta)]))
+                self.logger.info(
+                    f"Warning. Missing channel update for our channel {chan_id}; "
+                    f"filling invoice with incorrect data.")
+            routing_hints.append(('r', [(
+                chan.node_id,
+                chan_id,
+                fee_base_msat,
+                fee_proportional_millionths,
+                cltv_expiry_delta)]))
         return routing_hints
 
     def delete_payment(self, payment_hash_hex: str):
@@ -1802,8 +1745,9 @@ class LNWallet(LNWorker):
 
     def get_balance(self):
         with self.lock:
-            return Decimal(sum(chan.balance(LOCAL) if not chan.is_closed() else 0
-                               for chan in self.channels.values())) / 1000
+            return Decimal(sum(
+                chan.balance(LOCAL) if not chan.is_closed() else 0
+                for chan in self.channels.values())) / 1000
 
     def num_sats_can_send(self) -> Decimal:
         can_send = Decimal(0)
@@ -1942,8 +1886,7 @@ class LNWallet(LNWorker):
         return 'channel_backup:' + encrypted
 
     async def request_remote_force_close(
-            self, *, funding_txid: str, funding_index: int, connect_str: str,
-    ):
+            self, *, funding_txid: str, funding_index: int, connect_str: str):
         """
         Requests the remote to force close a channel. Can be used without
         having state or any backup for the channel.

@@ -36,6 +36,7 @@ from typing import NamedTuple, Optional, Sequence, List, Dict, Tuple, TYPE_CHECK
 import traceback
 import concurrent
 from concurrent import futures
+import copy
 
 import aiorpcx
 from aiorpcx import TaskGroup
@@ -531,7 +532,9 @@ class Network(Logger, NetworkRetryManager[ServerAddr]):
         e = self.get_fee_estimates()
         for nblock_target, fee in e.items():
             self.config.update_fee_estimates(nblock_target, fee)
-        self.logger.info(f'fee_estimates {e}')
+        if not hasattr(self, "_prev_fee_est") or self._prev_fee_est != e:
+            self._prev_fee_est = copy.copy(e)
+            self.logger.info(f'fee_estimates {e}')
         self.notify('fee')
 
     @with_recent_servers_lock
@@ -1217,6 +1220,7 @@ class Network(Logger, NetworkRetryManager[ServerAddr]):
     async def _stop(self, full_shutdown=False):
         self.logger.info("stopping network")
         try:
+            # note: cancel_remaining ~cannot be cancelled, it suppresses CancelledError
             await asyncio.wait_for(self.taskgroup.cancel_remaining(), timeout=2)
         except (asyncio.TimeoutError, asyncio.CancelledError) as e:
             self.logger.info(f"exc during main_taskgroup cancellation: {repr(e)}")

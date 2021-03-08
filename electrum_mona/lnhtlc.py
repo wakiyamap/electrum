@@ -41,7 +41,13 @@ class HTLCManager:
                 if not log[sub]['fee_updates']:
                     log[sub]['fee_updates'][0] = FeeUpdate(rate=initial_feerate, ctn_local=0, ctn_remote=0)
         self.log = log
-        self.lock = threading.RLock()
+
+        # We need a lock as many methods of HTLCManager are accessed by both the asyncio thread and the GUI.
+        # lnchannel sometimes calls us with Channel.db_lock (== log.lock) already taken,
+        # and we ourselves often take log.lock (via StoredDict.__getitem__).
+        # Hence, to avoid deadlocks, we reuse this same lock.
+        self.lock = log.lock
+
         self._init_maybe_active_htlc_ids()
 
     def with_lock(func):
@@ -537,10 +543,11 @@ class HTLCManager:
                                                                log_action='fails')
 
     ##### Queries re Fees:
+    # note: feerates are in sat/kw everywhere in this file
 
     @with_lock
     def get_feerate(self, subject: HTLCOwner, ctn: int) -> int:
-        """Return feerate used in subject's commitment txn at ctn."""
+        """Return feerate (sat/kw) used in subject's commitment txn at ctn."""
         ctn = max(0, ctn)  # FIXME rm this
         # only one party can update fees; use length of logs to figure out which:
         assert not (len(self.log[LOCAL]['fee_updates']) > 1 and len(self.log[REMOTE]['fee_updates']) > 1)
