@@ -6,7 +6,7 @@ import unittest
 
 from electrum_mona.lnaddr import shorten_amount, unshorten_amount, LnAddr, lnencode, lndecode, u5_to_bitarray, bitarray_to_u5
 from electrum_mona.segwit_addr import bech32_encode, bech32_decode
-from electrum_mona.lnutil import UnknownEvenFeatureBits, derive_payment_secret_from_payment_preimage
+from electrum_mona.lnutil import UnknownEvenFeatureBits, derive_payment_secret_from_payment_preimage, LnFeatures
 
 from . import ElectrumTestCase
 
@@ -128,6 +128,7 @@ class TestBolt11(ElectrumTestCase):
     def test_features(self):
         lnaddr = lndecode("lnmona25m1pvjluezpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdq5vdhkven9v5sxyetpdees9qzszsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygsw78e7nnjh75hssadjykhm85834l3q4juymunsryzewwhy43kaaeprmxnn4w8uvmpem60flrcpxr4sey558yrh2lwgdhv4z5a4lculqgqm5ng34")
         self.assertEqual(514, lnaddr.get_tag('9'))
+        self.assertEqual(LnFeatures(514), lnaddr.get_features())
 
         with self.assertRaises(UnknownEvenFeatureBits):
             lndecode("lnmona25m1pvjluezpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdq5vdhkven9v5sxyetpdees9qw7rhsay5tm4cuw8sp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygsq99ctuk92pu45k27shadaafncl0jea0m6r82mxl037s4ujv423az7ucn734zydafexf2eft3wufyyck73qz39acv9nxc50nxkvjhnpgph9l9yw")

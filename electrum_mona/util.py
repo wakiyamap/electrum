@@ -317,6 +317,7 @@ class DaemonThread(threading.Thread, Logger):
         self.running_lock = threading.Lock()
         self.job_lock = threading.Lock()
         self.jobs = []
+        self.stopped_event = threading.Event()  # set when fully stopped
 
     def add_jobs(self, jobs):
         with self.job_lock:
@@ -357,6 +358,7 @@ class DaemonThread(threading.Thread, Logger):
             jnius.detach()
             self.logger.info("jnius detach")
         self.logger.info("stopped")
+        self.stopped_event.set()
 
 
 def print_stderr(*args):
@@ -1176,11 +1178,9 @@ class NetworkJobOnDefaultServer(Logger, ABC):
         if taskgroup != self.taskgroup:
             raise asyncio.CancelledError()
 
-    async def stop(self):
-        unregister_callback(self._restart)
-        await self._stop()
-
-    async def _stop(self):
+    async def stop(self, *, full_shutdown: bool = True):
+        if full_shutdown:
+            unregister_callback(self._restart)
         await self.taskgroup.cancel_remaining()
 
     @log_exceptions
@@ -1190,7 +1190,7 @@ class NetworkJobOnDefaultServer(Logger, ABC):
             return  # we should get called again soon
 
         async with self._restart_lock:
-            await self._stop()
+            await self.stop(full_shutdown=False)
             self._reset()
             await self._start(interface)
 
@@ -1351,7 +1351,9 @@ def randrange(bound: int) -> int:
 
 
 class CallbackManager:
-        # callbacks set by the GUI
+    # callbacks set by the GUI or any thread
+    # guarantee: the callbacks will always get triggered from the asyncio thread.
+
     def __init__(self):
         self.callback_lock = threading.Lock()
         self.callbacks = defaultdict(list)      # note: needs self.callback_lock
@@ -1369,6 +1371,10 @@ class CallbackManager:
                     callbacks.remove(callback)
 
     def trigger_callback(self, event, *args):
+        """Trigger a callback with given arguments.
+        Can be called from any thread. The callback itself will get scheduled
+        on the event loop.
+        """
         if self.asyncio_loop is None:
             self.asyncio_loop = asyncio.get_event_loop()
             assert self.asyncio_loop.is_running(), "event loop not running"
@@ -1541,3 +1547,24 @@ def test_read_write_permissions(path) -> None:
         raise IOError(e) from e
     if echo != echo2:
         raise IOError('echo sanity-check failed')
+
+
+class nullcontext:
+    """Context manager that does no additional processing.
+    This is a ~backport of contextlib.nullcontext from Python 3.10
+    """
+
+    def __init__(self, enter_result=None):
+        self.enter_result = enter_result
+
+    def __enter__(self):
+        return self.enter_result
+
+    def __exit__(self, *excinfo):
+        pass
+
+    async def __aenter__(self):
+        return self.enter_result
+
+    async def __aexit__(self, *excinfo):
+        pass

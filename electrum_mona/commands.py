@@ -1081,6 +1081,12 @@ class Commands:
         coro = wallet.lnworker.force_close_channel(chan_id) if force else wallet.lnworker.close_channel(chan_id)
         return await coro
 
+    @command('wn')
+    async def request_force_close(self, channel_point, wallet: Abstract_Wallet = None):
+        txid, index = channel_point.split(':')
+        chan_id, _ = channel_id_from_funding_tx(txid, int(index))
+        return await wallet.lnworker.request_force_close_from_backup(chan_id)
+
     @command('w')
     async def export_channel_backup(self, channel_point, wallet: Abstract_Wallet = None):
         txid, index = channel_point.split(':')
@@ -1089,7 +1095,7 @@ class Commands:
 
     @command('w')
     async def import_channel_backup(self, encrypted, wallet: Abstract_Wallet = None):
-        return wallet.lnbackups.import_channel_backup(encrypted)
+        return wallet.lnworker.import_channel_backup(encrypted)
 
     @command('wn')
     async def get_channel_ctx(self, channel_point, iknowwhatimdoing=False, wallet: Abstract_Wallet = None):

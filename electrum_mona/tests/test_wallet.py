@@ -5,8 +5,9 @@ import os
 import json
 from decimal import Decimal
 import time
-
 from io import StringIO
+import asyncio
+
 from electrum_mona.storage import WalletStorage
 from electrum_mona.wallet_db import FINAL_SEED_VERSION
 from electrum_mona.wallet import (Abstract_Wallet, Standard_Wallet, create_new_wallet,
@@ -16,6 +17,7 @@ from electrum_mona.util import TxMinedInfo, InvalidPassword
 from electrum_mona.bitcoin import COIN
 from electrum_mona.wallet_db import WalletDB
 from electrum_mona.simple_config import SimpleConfig
+from electrum_mona import util
 
 from . import ElectrumTestCase
 
@@ -139,7 +141,7 @@ class TestFiat(ElectrumTestCase):
         self.assertEqual(True, Abstract_Wallet.set_fiat_value(self.wallet, txid, ccy, '1,000.001000001', self.fx, self.value_sat))
 
     def test_too_high_precision_value_resets_with_no_saved_value(self):
-        self.assertEqual(True, Abstract_Wallet.set_fiat_value(self.wallet, txid, ccy, '1,000.00100000', self.fx, self.value_sat))
+        self.assertEqual(True, Abstract_Wallet.set_fiat_value(self.wallet, txid, ccy, '1,000.001', self.fx, self.value_sat))
 
     def test_empty_resets(self):
         self.assertEqual(True, Abstract_Wallet.set_fiat_value(self.wallet, txid, ccy, '', self.fx, self.value_sat))

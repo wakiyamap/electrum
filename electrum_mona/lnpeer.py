@@ -9,11 +9,12 @@ from collections import OrderedDict, defaultdict
 import asyncio
 import os
 import time
-from typing import Tuple, Dict, TYPE_CHECKING, Optional, Union
+from typing import Tuple, Dict, TYPE_CHECKING, Optional, Union, Set
 from datetime import datetime
 import functools
 
 import aiorpcx
+from aiorpcx import TaskGroup
 
 from .crypto import sha256, sha256d
 from . import bitcoin, util
@@ -49,9 +50,10 @@ from .interface import GracefulDisconnect
 from .lnrouter import fee_for_edge_msat
 from .lnutil import ln_dummy_address
 from .json_db import StoredDict
+from .invoices import PR_PAID
 
 if TYPE_CHECKING:
-    from .lnworker import LNGossip, LNWallet, LNBackups
+    from .lnworker import LNGossip, LNWallet
     from .lnrouter import LNPaymentRoute
     from .transaction import PartialTransaction
 
@@ -64,13 +66,16 @@ class Peer(Logger):
 
     def __init__(
             self,
-            lnworker: Union['LNGossip', 'LNWallet', 'LNBackups'],
+            lnworker: Union['LNGossip', 'LNWallet'],
             pubkey: bytes,
-            transport: LNTransportBase
-    ):
+            transport: LNTransportBase,
+            *, is_channel_backup= False):
+
+        self.is_channel_backup = is_channel_backup
         self._sent_init = False  # type: bool
         self._received_init = False  # type: bool
         self.initialized = asyncio.Future()
+        self.got_disconnected = asyncio.Event()
         self.querying = asyncio.Event()
         self.transport = transport
         self.pubkey = pubkey  # remote pubkey
@@ -95,6 +100,11 @@ class Peer(Logger):
         self.orphan_channel_updates = OrderedDict()
         Logger.__init__(self)
         self.taskgroup = SilentTaskGroup()
+        # HTLCs offered by REMOTE, that we started removing but are still active:
+        self.received_htlcs_pending_removal = set()  # type: Set[Tuple[Channel, int]]
+        self.received_htlc_removed_event = asyncio.Event()
+        self._htlc_switch_iterstart_event = asyncio.Event()
+        self._htlc_switch_iterdone_event = asyncio.Event()
 
     def send_message(self, message_name: str, **kwargs):
         assert type(message_name) is str
@@ -170,8 +180,7 @@ class Peer(Logger):
     def process_message(self, message):
         message_type, payload = decode_msg(message)
         # only process INIT if we are a backup
-        from .lnworker import LNBackups
-        if isinstance(self.lnworker, LNBackups) and message_type != 'init':
+        if self.is_channel_backup is True and message_type != 'init':
             return
         if message_type in self.ordered_messages:
             chan_id = payload.get('channel_id') or payload["temporary_channel_id"]
@@ -490,6 +499,7 @@ class Peer(Logger):
         except:
             pass
         self.lnworker.peer_closed(self)
+        self.got_disconnected.set()
 
     def is_static_remotekey(self):
         return self.features.supports(LnFeatures.OPTION_STATIC_REMOTEKEY_OPT)
@@ -1316,22 +1326,22 @@ class Peer(Logger):
     def on_update_add_htlc(self, chan: Channel, payload):
         payment_hash = payload["payment_hash"]
         htlc_id = payload["id"]
-        self.logger.info(f"on_update_add_htlc. chan {chan.short_channel_id}. htlc_id {htlc_id}")
         cltv_expiry = payload["cltv_expiry"]
         amount_msat_htlc = payload["amount_msat"]
         onion_packet = payload["onion_routing_packet"]
-        if chan.get_state() != ChannelState.OPEN:
-            raise RemoteMisbehaving(f"received update_add_htlc while chan.get_state() != OPEN. state was {chan.get_state()!r}")
-        if cltv_expiry > bitcoin.NLOCKTIME_BLOCKHEIGHT_MAX:
-            asyncio.ensure_future(self.lnworker.try_force_closing(chan.channel_id))
-            raise RemoteMisbehaving(f"received update_add_htlc with cltv_expiry > BLOCKHEIGHT_MAX. value was {cltv_expiry}")
-        # add htlc
         htlc = UpdateAddHtlc(
             amount_msat=amount_msat_htlc,
             payment_hash=payment_hash,
             cltv_expiry=cltv_expiry,
             timestamp=int(time.time()),
             htlc_id=htlc_id)
+        self.logger.info(f"on_update_add_htlc. chan {chan.short_channel_id}. htlc={str(htlc)}")
+        if chan.get_state() != ChannelState.OPEN:
+            raise RemoteMisbehaving(f"received update_add_htlc while chan.get_state() != OPEN. state was {chan.get_state()!r}")
+        if cltv_expiry > bitcoin.NLOCKTIME_BLOCKHEIGHT_MAX:
+            asyncio.ensure_future(self.lnworker.try_force_closing(chan.channel_id))
+            raise RemoteMisbehaving(f"received update_add_htlc with cltv_expiry > BLOCKHEIGHT_MAX. value was {cltv_expiry}")
+        # add htlc
         chan.receive_htlc(htlc, onion_packet)
         util.trigger_callback('htlc_added', chan, htlc, RECEIVED)
 
@@ -1342,6 +1352,9 @@ class Peer(Logger):
 
         # Forward HTLC
         # FIXME: there are critical safety checks MISSING here
+        #        - for example; atm we forward first and then persist "forwarding_info",
+        #          so if we segfault in-between and restart, we might forward an HTLC twice...
+        #          (same for trampoline forwarding)
         forwarding_enabled = self.network.config.get('lightning_forward_payments', False)
         if not forwarding_enabled:
             self.logger.info(f"forwarding is disabled. failing htlc.")
@@ -1454,7 +1467,6 @@ class Peer(Logger):
                     amount_to_pay=amt_to_forward,
                     min_cltv_expiry=cltv_from_onion,
                     r_tags=[],
-                    t_tags=[],
                     invoice_features=invoice_features,
                     fwd_trampoline_onion=next_trampoline_onion,
                     fwd_trampoline_fee=trampoline_fee,
@@ -1475,7 +1487,7 @@ class Peer(Logger):
             chan: Channel,
             htlc: UpdateAddHtlc,
             processed_onion: ProcessedOnionPacket,
-            is_trampoline: bool = False) -> Tuple[Optional[bytes], Optional[bytes]]:
+            is_trampoline: bool = False) -> Tuple[Optional[bytes], Optional[OnionPacket]]:
 
         """As a final recipient of an HTLC, decide if we should fulfill it.
         Return (preimage, trampoline_onion_packet) with at most a single element not None
@@ -1538,7 +1550,7 @@ class Peer(Logger):
             payment_secret_from_onion = None
 
         if total_msat > amt_to_forward:
-            mpp_status = self.lnworker.add_received_htlc(payment_secret_from_onion, chan.short_channel_id, htlc, total_msat)
+            mpp_status = self.lnworker.check_received_mpp_htlc(payment_secret_from_onion, chan.short_channel_id, htlc, total_msat)
             if mpp_status is None:
                 return None, None
             if mpp_status is False:
@@ -1548,6 +1560,7 @@ class Peer(Logger):
 
         # if there is a trampoline_onion, maybe_fulfill_htlc will be called again
         if processed_onion.trampoline_onion_packet:
+            # TODO: we should check that all trampoline_onions are the same
             return None, processed_onion.trampoline_onion_packet
 
         info = self.lnworker.get_payment_info(htlc.payment_hash)
@@ -1563,21 +1576,26 @@ class Peer(Logger):
         if not (invoice_msat is None or invoice_msat <= total_msat <= 2 * invoice_msat):
             log_fail_reason(f"total_msat={total_msat} too different from invoice_msat={invoice_msat}")
             raise exc_incorrect_or_unknown_pd
+        self.logger.info(f"maybe_fulfill_htlc. will FULFILL HTLC: chan {chan.short_channel_id}. htlc={str(htlc)}")
+        self.lnworker.set_request_status(htlc.payment_hash, PR_PAID)
         return preimage, None
 
     def fulfill_htlc(self, chan: Channel, htlc_id: int, preimage: bytes):
         self.logger.info(f"_fulfill_htlc. chan {chan.short_channel_id}. htlc_id {htlc_id}")
         assert chan.can_send_ctx_updates(), f"cannot send updates: {chan.short_channel_id}"
-        assert chan.hm.is_add_htlc_irrevocably_committed_yet(htlc_proposer=REMOTE, htlc_id=htlc_id)
+        assert chan.hm.is_htlc_irrevocably_added_yet(htlc_proposer=REMOTE, htlc_id=htlc_id)
+        self.received_htlcs_pending_removal.add((chan, htlc_id))
         chan.settle_htlc(preimage, htlc_id)
-        self.send_message("update_fulfill_htlc",
-                          channel_id=chan.channel_id,
-                          id=htlc_id,
-                          payment_preimage=preimage)
+        self.send_message(
+            "update_fulfill_htlc",
+            channel_id=chan.channel_id,
+            id=htlc_id,
+            payment_preimage=preimage)
 
     def fail_htlc(self, *, chan: Channel, htlc_id: int, error_bytes: bytes):
         self.logger.info(f"fail_htlc. chan {chan.short_channel_id}. htlc_id {htlc_id}.")
         assert chan.can_send_ctx_updates(), f"cannot send updates: {chan.short_channel_id}"
+        self.received_htlcs_pending_removal.add((chan, htlc_id))
         chan.fail_htlc(htlc_id)
         self.send_message(
             "update_fail_htlc",
@@ -1589,9 +1607,10 @@ class Peer(Logger):
     def fail_malformed_htlc(self, *, chan: Channel, htlc_id: int, reason: OnionRoutingFailure):
         self.logger.info(f"fail_malformed_htlc. chan {chan.short_channel_id}. htlc_id {htlc_id}.")
         assert chan.can_send_ctx_updates(), f"cannot send updates: {chan.short_channel_id}"
-        chan.fail_htlc(htlc_id)
         if not (reason.code & OnionFailureCodeMetaFlag.BADONION and len(reason.data) == 32):
             raise Exception(f"unexpected reason when sending 'update_fail_malformed_htlc': {reason!r}")
+        self.received_htlcs_pending_removal.add((chan, htlc_id))
+        chan.fail_htlc(htlc_id)
         self.send_message(
             "update_fail_malformed_htlc",
             channel_id=chan.channel_id,
@@ -1793,8 +1812,13 @@ class Peer(Logger):
     async def htlc_switch(self):
         await self.initialized
         while True:
-            await asyncio.sleep(0.1)
+            self._htlc_switch_iterdone_event.set()
+            self._htlc_switch_iterdone_event.clear()
+            await asyncio.sleep(0.1)  # TODO maybe make this partly event-driven
+            self._htlc_switch_iterstart_event.set()
+            self._htlc_switch_iterstart_event.clear()
             self.ping_if_required()
+            self._maybe_cleanup_received_htlcs_pending_removal()
             for chan_id, chan in self.channels.items():
                 if not chan.can_send_ctx_updates():
                     continue
@@ -1802,7 +1826,7 @@ class Peer(Logger):
                 done = set()
                 unfulfilled = chan.hm.log.get('unfulfilled_htlcs', {})
                 for htlc_id, (local_ctn, remote_ctn, onion_packet_hex, forwarding_info) in unfulfilled.items():
-                    if not chan.hm.is_add_htlc_irrevocably_committed_yet(htlc_proposer=REMOTE, htlc_id=htlc_id):
+                    if not chan.hm.is_htlc_irrevocably_added_yet(htlc_proposer=REMOTE, htlc_id=htlc_id):
                         continue
                     htlc = chan.hm.get_htlc_by_id(REMOTE, htlc_id)
                     error_reason = None  # type: Optional[OnionRoutingFailure]
@@ -1817,7 +1841,7 @@ class Peer(Logger):
                         error_reason = e
                     else:
                         try:
-                            preimage, fw_info, error_bytes = self.process_unfulfilled_htlc(
+                            preimage, fw_info, error_bytes = await self.process_unfulfilled_htlc(
                                 chan=chan,
                                 htlc=htlc,
                                 forwarding_info=forwarding_info,
@@ -1846,7 +1870,30 @@ class Peer(Logger):
                 for htlc_id in done:
                     unfulfilled.pop(htlc_id)
 
-    def process_unfulfilled_htlc(
+    def _maybe_cleanup_received_htlcs_pending_removal(self) -> None:
+        done = set()
+        for chan, htlc_id in self.received_htlcs_pending_removal:
+            if chan.hm.is_htlc_irrevocably_removed_yet(htlc_proposer=REMOTE, htlc_id=htlc_id):
+                done.add((chan, htlc_id))
+        if done:
+            for key in done:
+                self.received_htlcs_pending_removal.remove(key)
+            self.received_htlc_removed_event.set()
+            self.received_htlc_removed_event.clear()
+
+    async def wait_one_htlc_switch_iteration(self) -> None:
+        """Waits until the HTLC switch does a full iteration or the peer disconnects,
+        whichever happens first.
+        """
+        async def htlc_switch_iteration():
+            await self._htlc_switch_iterstart_event.wait()
+            await self._htlc_switch_iterdone_event.wait()
+
+        async with TaskGroup(wait=any) as group:
+            await group.spawn(htlc_switch_iteration())
+            await group.spawn(self.got_disconnected.wait())
+
+    async def process_unfulfilled_htlc(
             self, *,
             chan: Channel,
             htlc: UpdateAddHtlc,
@@ -1882,6 +1929,7 @@ class Peer(Logger):
                             processed_onion=trampoline_onion,
                             is_trampoline=True)
                     else:
+                        await self.lnworker.enable_htlc_forwarding.wait()
                         self.maybe_forward_trampoline(
                             chan=chan,
                             htlc=htlc,
@@ -1896,6 +1944,7 @@ class Peer(Logger):
                         raise error_reason
 
         elif not forwarding_info:
+            await self.lnworker.enable_htlc_forwarding.wait()
             next_chan_id, next_htlc_id = self.maybe_forward_htlc(
                 htlc=htlc,
                 processed_onion=processed_onion)
