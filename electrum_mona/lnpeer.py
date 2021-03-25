@@ -548,7 +548,7 @@ class Peer(Logger):
             static_remotekey=static_remotekey,
             upfront_shutdown_script=upfront_shutdown_script,
             # TODO monacoin is OK?
-            to_self_delay=self.network.config.get('lightning_to_self_delay', 7 * 960),
+            to_self_delay=self.network.config.get('lightning_to_self_delay', 7 * 144),
             dust_limit_sat=dust_limit_sat,
             max_htlc_value_in_flight_msat=funding_sat * 1000,
             max_accepted_htlcs=30,

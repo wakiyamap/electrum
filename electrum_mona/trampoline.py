@@ -17,45 +17,45 @@ TRAMPOLINE_FEES = [
     {
         'fee_base_msat': 0,
         'fee_proportional_millionths': 0,
-        'cltv_expiry_delta': 3840,
+        'cltv_expiry_delta': 960,
     },
     {
         'fee_base_msat': 1000,
         'fee_proportional_millionths': 100,
-        'cltv_expiry_delta': 3840,
+        'cltv_expiry_delta': 960,
     },
     {
         'fee_base_msat': 3000,
         'fee_proportional_millionths': 100,
-        'cltv_expiry_delta': 3840,
+        'cltv_expiry_delta': 960,
     },
     {
         'fee_base_msat': 5000,
         'fee_proportional_millionths': 500,
-        'cltv_expiry_delta': 3840,
+        'cltv_expiry_delta': 960,
     },
     {
         'fee_base_msat': 7000,
         'fee_proportional_millionths': 1000,
-        'cltv_expiry_delta': 3840,
+        'cltv_expiry_delta': 960,
     },
     {
         'fee_base_msat': 12000,
         'fee_proportional_millionths': 3000,
-        'cltv_expiry_delta': 3840,
+        'cltv_expiry_delta': 960,
     },
     {
         'fee_base_msat': 100000,
         'fee_proportional_millionths': 3000,
-        'cltv_expiry_delta': 3840,
+        'cltv_expiry_delta': 960,
     },
 ]
 
 # hardcoded list
 # TODO for some pubkeys, there are multiple network addresses we could try
 TRAMPOLINE_NODES_MAINNET = {
-    'ACINQ': LNPeerAddr(host='34.239.230.56', port=9735, pubkey=bytes.fromhex('03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f')),
-    'Electrum trampoline': LNPeerAddr(host='144.76.99.209', port=9740, pubkey=bytes.fromhex('03ecef675be448b615e6176424070673ef8284e0fd19d8be062a6cb5b130a0a0d1')),
+    'Electrum trampoline01': LNPeerAddr(host='153.126.146.182', port=9735, pubkey=bytes.fromhex('02af0e7b05a3fd83d1ecfcf9fd1416e6a7052fcd4d6a82aa4632a0de3f20787a15')),
+    'Electrum trampoline02': LNPeerAddr(host='51.15.43.235', port=9735, pubkey=bytes.fromhex('03bb4962b8abf8a30574881631a4f1529c50dc1bfb64a173e05a05b84f15d4f9a2')),
 }
 TRAMPOLINE_NODES_TESTNET = {
     'endurance': LNPeerAddr(host='34.250.234.192', port=9735, pubkey=bytes.fromhex('03933884aaf1d6b108397e5efe5c86bcf2d8ca8d2f700eda99db9214fc2712b134')),

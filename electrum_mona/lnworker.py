@@ -1922,7 +1922,7 @@ class LNWallet(LNWorker):
         feerate_per_kvbyte = self.network.config.eta_target_to_fee(FEE_LN_ETA_TARGET)
         if feerate_per_kvbyte is None:
             feerate_per_kvbyte = FEERATE_FALLBACK_STATIC_FEE
-        return max(253, feerate_per_kvbyte // 4)
+        return max(25300, feerate_per_kvbyte // 4)
 
     def create_channel_backup(self, channel_id):
         chan = self._channels[channel_id]
