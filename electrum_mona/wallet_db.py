@@ -37,7 +37,8 @@ from .invoices import PR_TYPE_ONCHAIN, Invoice
 from .keystore import bip44_derivation
 from .transaction import Transaction, TxOutpoint, tx_from_any, PartialTransaction, PartialTxOutput
 from .logging import Logger
-from .lnutil import LOCAL, REMOTE, FeeUpdate, UpdateAddHtlc, LocalConfig, RemoteConfig, Keypair, OnlyPubkeyKeypair, RevocationStore, ChannelBackupStorage
+from .lnutil import LOCAL, REMOTE, FeeUpdate, UpdateAddHtlc, LocalConfig, RemoteConfig, Keypair, OnlyPubkeyKeypair, RevocationStore
+from .lnutil import ImportedChannelBackupStorage, OnchainChannelBackupStorage
 from .lnutil import ChannelConstraints, Outpoint, ShachainElement
 from .json_db import StoredDict, JsonDB, locked, modifier
 from .plugin import run_hook, plugin_loaders
@@ -52,7 +53,7 @@ if TYPE_CHECKING:
 
 OLD_SEED_VERSION = 4        # electrum versions < 2.0
 NEW_SEED_VERSION = 11       # electrum versions >= 2.0
-FINAL_SEED_VERSION = 38     # electrum >= 2.7 will set this to prevent
+FINAL_SEED_VERSION = 39     # electrum >= 2.7 will set this to prevent
                             # old versions from overwriting new format
 
 
@@ -186,6 +187,7 @@ class WalletDB(JsonDB):
         self._convert_version_36()
         self._convert_version_37()
         self._convert_version_38()
+        self._convert_version_39()
         self.put('seed_version', FINAL_SEED_VERSION)  # just to be sure
 
         self._after_upgrade_tasks()
@@ -526,7 +528,7 @@ class WalletDB(JsonDB):
             r['buckets'] = d
             c['revocation_store'] = r
         # convert channels to dict
-        self.data['channels'] = { x['channel_id']: x for x in channels }
+        self.data['channels'] = {x['channel_id']: x for x in channels}
         # convert txi & txo
         txi = self.get('txi', {})
         for tx_hash, d in list(txi.items()):
@@ -777,6 +779,13 @@ class WalletDB(JsonDB):
                     if not (isinstance(amount_msat, int) and 0 <= amount_msat <= max_sats * 1000):
                         del d[key]
         self.data['seed_version'] = 38
+
+    def _convert_version_39(self):
+        # this upgrade prevents initialization of lightning_privkey2 after lightning_xprv has been set
+        if not self._is_upgrade_method_needed(38, 38):
+            return
+        self.data['imported_channel_backups'] = self.data.pop('channel_backups', {})
+        self.data['seed_version'] = 39
 
     def _convert_imported(self):
         if not self._is_upgrade_method_needed(0, 13):
@@ -1273,8 +1282,10 @@ class WalletDB(JsonDB):
             v = dict((k, FeeUpdate(**x)) for k, x in v.items())
         elif key == 'submarine_swaps':
             v = dict((k, SwapData(**x)) for k, x in v.items())
-        elif key == 'channel_backups':
-            v = dict((k, ChannelBackupStorage(**x)) for k, x in v.items())
+        elif key == 'imported_channel_backups':
+            v = dict((k, ImportedChannelBackupStorage(**x)) for k, x in v.items())
+        elif key == 'onchain_channel_backups':
+            v = dict((k, OnchainChannelBackupStorage(**x)) for k, x in v.items())
         elif key == 'tx_fees':
             v = dict((k, TxFeesValue(*x)) for k, x in v.items())
         elif key == 'prevouts_by_scripthash':

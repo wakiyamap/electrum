@@ -25,7 +25,7 @@
 
 import io
 import hashlib
-from typing import Sequence, List, Tuple, NamedTuple, TYPE_CHECKING
+from typing import Sequence, List, Tuple, NamedTuple, TYPE_CHECKING, Dict, Any, Optional
 from enum import IntEnum, IntFlag
 
 from . import ecc
@@ -34,6 +34,7 @@ from .util import bh2u, profiler, xor_bytes, bfh
 from .lnutil import (get_ecdh, PaymentFailure, NUM_MAX_HOPS_IN_PAYMENT_PATH,
                      NUM_MAX_EDGES_IN_PAYMENT_PATH, ShortChannelID, OnionFailureCodeMetaFlag)
 from .lnmsg import OnionWireSerializer, read_bigsize_int, write_bigsize_int
+from . import lnmsg
 
 if TYPE_CHECKING:
     from .lnrouter import LNPaymentRoute
@@ -169,7 +170,7 @@ class OnionPacket:
 
     def __init__(self, public_key: bytes, hops_data: bytes, hmac: bytes):
         assert len(public_key) == 33
-        assert len(hops_data) in [ HOPS_DATA_SIZE, TRAMPOLINE_HOPS_DATA_SIZE ]
+        assert len(hops_data) in [HOPS_DATA_SIZE, TRAMPOLINE_HOPS_DATA_SIZE]
         assert len(hmac) == PER_HOP_HMAC_SIZE
         self.version = 0
         self.public_key = public_key
@@ -183,13 +184,13 @@ class OnionPacket:
         ret += self.public_key
         ret += self.hops_data
         ret += self.hmac
-        if len(ret) - 66 not in [ HOPS_DATA_SIZE, TRAMPOLINE_HOPS_DATA_SIZE ]:
+        if len(ret) - 66 not in [HOPS_DATA_SIZE, TRAMPOLINE_HOPS_DATA_SIZE]:
             raise Exception('unexpected length {}'.format(len(ret)))
         return ret
 
     @classmethod
     def from_bytes(cls, b: bytes):
-        if len(b) - 66 not in [ HOPS_DATA_SIZE, TRAMPOLINE_HOPS_DATA_SIZE ]:
+        if len(b) - 66 not in [HOPS_DATA_SIZE, TRAMPOLINE_HOPS_DATA_SIZE]:
             raise Exception('unexpected length {}'.format(len(b)))
         version = b[0]
         if version != 0:
@@ -431,7 +432,7 @@ class OnionRoutingFailure(Exception):
         try:
             failure_code = OnionFailureCode(failure_code)
         except ValueError:
-            pass  # uknown failure code
+            pass  # unknown failure code
         failure_data = failure_msg[2:]
         return OnionRoutingFailure(failure_code, failure_data)
 
@@ -439,6 +440,13 @@ class OnionRoutingFailure(Exception):
         if isinstance(self.code, OnionFailureCode):
             return str(self.code.name)
         return f"Unknown error ({self.code!r})"
+
+    def decode_data(self) -> Optional[Dict[str, Any]]:
+        try:
+            message_type, payload = OnionWireSerializer.decode_msg(self.to_bytes())
+        except lnmsg.FailedToParseMsg:
+            payload = None
+        return payload
 
 
 def construct_onion_error(

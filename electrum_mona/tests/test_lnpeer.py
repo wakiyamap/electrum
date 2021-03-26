@@ -8,7 +8,7 @@ import logging
 import concurrent
 from concurrent import futures
 import unittest
-from typing import Iterable, NamedTuple, Tuple, List
+from typing import Iterable, NamedTuple, Tuple, List, Dict
 
 from aiorpcx import TaskGroup, timeout_after, TaskTimeout
 
@@ -29,6 +29,7 @@ from electrum_mona.lnrouter import LNPathFinder, PathEdge, LNPathInconsistent
 from electrum_mona.channel_db import ChannelDB
 from electrum_mona.lnworker import LNWallet, NoPathFound
 from electrum_mona.lnmsg import encode_msg, decode_msg
+from electrum_mona import lnmsg
 from electrum_mona.logging import console_stderr_handler, Logger
 from electrum_mona.lnworker import PaymentInfo, RECEIVED
 from electrum_mona.lnonion import OnionFailureCode
@@ -38,7 +39,7 @@ from electrum_mona.invoices import PR_PAID, PR_UNPAID
 
 from .test_lnchannel import create_test_channels
 from .test_bitcoin import needs_test_with_all_chacha20_implementations
-from . import ElectrumTestCase
+from . import TestCaseForTestnet
 
 def keypair():
     priv = ECPrivkey.generate_random_key().get_secret_bytes()
@@ -115,6 +116,7 @@ class MockWallet:
 class MockLNWallet(Logger, NetworkRetryManager[LNPeerAddr]):
     MPP_EXPIRY = 2  # HTLC timestamps are cast to int, so this cannot be 1
     TIMEOUT_SHUTDOWN_FAIL_PENDING_HTLCS = 0
+    INITIAL_TRAMPOLINE_FEE_LEVEL = 0
 
     def __init__(self, *, local_keypair: Keypair, chans: Iterable['Channel'], tx_queue, name):
         self.name = name
@@ -140,10 +142,8 @@ class MockLNWallet(Logger, NetworkRetryManager[LNPeerAddr]):
             chan.lnworker = self
         self._peers = {}  # bytes -> Peer
         # used in tests
-        self.enable_htlc_settle = asyncio.Event()
-        self.enable_htlc_settle.set()
-        self.enable_htlc_forwarding = asyncio.Event()
-        self.enable_htlc_forwarding.set()
+        self.enable_htlc_settle = True
+        self.enable_htlc_forwarding = True
         self.received_mpp_htlcs = dict()
         self.sent_htlcs = defaultdict(asyncio.Queue)
         self.sent_htlcs_routes = dict()
@@ -223,6 +223,8 @@ class MockLNWallet(Logger, NetworkRetryManager[LNPeerAddr]):
     is_trampoline_peer = LNWallet.is_trampoline_peer
     wait_for_received_pending_htlcs_to_get_removed = LNWallet.wait_for_received_pending_htlcs_to_get_removed
     on_proxy_changed = LNWallet.on_proxy_changed
+    _decode_channel_update_msg = LNWallet._decode_channel_update_msg
+    _handle_chanupd_from_failed_htlc = LNWallet._handle_chanupd_from_failed_htlc
 
 
 class MockTransport:
@@ -300,10 +302,10 @@ class SquareGraph(NamedTuple):
 
 
 class PaymentDone(Exception): pass
-class TestSuccess(Exception): pass
+class SuccessfulTest(Exception): pass
 
 
-class TestPeer(ElectrumTestCase):
+class TestPeer(TestCaseForTestnet):
 
     @classmethod
     def setUpClass(cls):
@@ -349,12 +351,38 @@ class TestPeer(ElectrumTestCase):
         p2.mark_open(bob_channel)
         return p1, p2, w1, w2, q1, q2
 
-    def prepare_chans_and_peers_in_square(self) -> SquareGraph:
+    def prepare_chans_and_peers_in_square(self, funds_distribution: Dict[str, Tuple[int, int]]=None) -> SquareGraph:
+        if not funds_distribution:
+            funds_distribution = {}
         key_a, key_b, key_c, key_d = [keypair() for i in range(4)]
-        chan_ab, chan_ba = create_test_channels(alice_name="alice", bob_name="bob", alice_pubkey=key_a.pubkey, bob_pubkey=key_b.pubkey)
-        chan_ac, chan_ca = create_test_channels(alice_name="alice", bob_name="carol", alice_pubkey=key_a.pubkey, bob_pubkey=key_c.pubkey)
-        chan_bd, chan_db = create_test_channels(alice_name="bob", bob_name="dave", alice_pubkey=key_b.pubkey, bob_pubkey=key_d.pubkey)
-        chan_cd, chan_dc = create_test_channels(alice_name="carol", bob_name="dave", alice_pubkey=key_c.pubkey, bob_pubkey=key_d.pubkey)
+        local_balance, remote_balance = funds_distribution.get('ab') or (None, None)
+        chan_ab, chan_ba = create_test_channels(
+            alice_name="alice", bob_name="bob",
+            alice_pubkey=key_a.pubkey, bob_pubkey=key_b.pubkey,
+            local_msat=local_balance,
+            remote_msat=remote_balance,
+        )
+        local_balance, remote_balance = funds_distribution.get('ac') or (None, None)
+        chan_ac, chan_ca = create_test_channels(
+            alice_name="alice", bob_name="carol",
+            alice_pubkey=key_a.pubkey, bob_pubkey=key_c.pubkey,
+            local_msat=local_balance,
+            remote_msat=remote_balance,
+        )
+        local_balance, remote_balance = funds_distribution.get('bd') or (None, None)
+        chan_bd, chan_db = create_test_channels(
+            alice_name="bob", bob_name="dave",
+            alice_pubkey=key_b.pubkey, bob_pubkey=key_d.pubkey,
+            local_msat=local_balance,
+            remote_msat=remote_balance,
+        )
+        local_balance, remote_balance = funds_distribution.get('cd') or (None, None)
+        chan_cd, chan_dc = create_test_channels(
+            alice_name="carol", bob_name="dave",
+            alice_pubkey=key_c.pubkey, bob_pubkey=key_d.pubkey,
+            local_msat=local_balance,
+            remote_msat=remote_balance,
+        )
         trans_ab, trans_ba = transport_pair(key_a, key_b, chan_ab.name, chan_ba.name)
         trans_ac, trans_ca = transport_pair(key_a, key_c, chan_ac.name, chan_ca.name)
         trans_bd, trans_db = transport_pair(key_b, key_d, chan_bd.name, chan_db.name)
@@ -778,6 +806,43 @@ class TestPeer(ElectrumTestCase):
         with self.assertRaises(PaymentDone):
             run(f())
 
+    @needs_test_with_all_chacha20_implementations
+    def test_payment_with_temp_channel_failure(self):
+        # prepare channels such that a temporary channel failure happens at c->d
+        funds_distribution = {
+            'ac': (200_000_000, 200_000_000),  # low fees
+            'cd': (50_000_000, 200_000_000),   # low fees
+            'ab': (200_000_000, 200_000_000),  # high fees
+            'bd': (200_000_000, 200_000_000),  # high fees
+        }
+        # the payment happens in three attempts:
+        # 1. along ac->cd due to low fees with temp channel failure:
+        #   with chanupd: ORPHANED, private channel update
+        # 2. along ac->cd with temp channel failure:
+        #   with chanupd: ORPHANED, private channel update, but already received, channel gets blacklisted
+        # 3. along ab->bd with success
+        amount_to_pay = 100_000_000
+        graph = self.prepare_chans_and_peers_in_square(funds_distribution)
+        peers = graph.all_peers()
+        async def pay(lnaddr, pay_req):
+            self.assertEqual(PR_UNPAID, graph.w_d.get_payment_status(lnaddr.paymenthash))
+            result, log = await graph.w_a.pay_invoice(pay_req, attempts=3)
+            self.assertTrue(result)
+            self.assertEqual(PR_PAID, graph.w_d.get_payment_status(lnaddr.paymenthash))
+            self.assertEqual(OnionFailureCode.TEMPORARY_CHANNEL_FAILURE, log[0].failure_msg.code)
+            self.assertEqual(OnionFailureCode.TEMPORARY_CHANNEL_FAILURE, log[1].failure_msg.code)
+            raise PaymentDone()
+        async def f():
+            async with TaskGroup() as group:
+                for peer in peers:
+                    await group.spawn(peer._message_loop())
+                    await group.spawn(peer.htlc_switch())
+                await asyncio.sleep(0.2)
+                lnaddr, pay_req = await self.prepare_invoice(graph.w_d, amount_msat=amount_to_pay, include_routing_hints=True)
+                await group.spawn(pay(lnaddr, pay_req))
+        with self.assertRaises(PaymentDone):
+            run(f())
+
     def _run_mpp(self, graph, kwargs1, kwargs2):
         self.assertEqual(500_000_000_000, graph.chan_ab.balance(LOCAL))
         self.assertEqual(500_000_000_000, graph.chan_ac.balance(LOCAL))
@@ -790,7 +855,7 @@ class TestPeer(ElectrumTestCase):
             if mpp_invoice:
                 graph.w_d.features |= LnFeatures.BASIC_MPP_OPT
             if not bob_forwarding:
-                graph.w_b.enable_htlc_forwarding.clear()
+                graph.w_b.enable_htlc_forwarding = False
             if alice_uses_trampoline:
                 if graph.w_a.network.channel_db:
                     graph.w_a.network.channel_db.stop()
@@ -803,7 +868,7 @@ class TestPeer(ElectrumTestCase):
             result, log = await graph.w_a.pay_invoice(pay_req, attempts=attempts)
             if not bob_forwarding:
                 # reset to previous state, sleep 2s so that the second htlc can time out
-                graph.w_b.enable_htlc_forwarding.set()
+                graph.w_b.enable_htlc_forwarding = True
                 await asyncio.sleep(2)
             if result:
                 self.assertEqual(PR_PAID, graph.w_d.get_payment_status(lnaddr.paymenthash))
@@ -855,7 +920,7 @@ class TestPeer(ElectrumTestCase):
         graph.w_d.TIMEOUT_SHUTDOWN_FAIL_PENDING_HTLCS = 3
         async def pay():
             graph.w_d.features |= LnFeatures.BASIC_MPP_OPT
-            graph.w_b.enable_htlc_forwarding.clear()  # Bob will hold forwarded HTLCs
+            graph.w_b.enable_htlc_forwarding = False  # Bob will hold forwarded HTLCs
             assert graph.w_a.network.channel_db is not None
             lnaddr, pay_req = await self.prepare_invoice(graph.w_d, include_routing_hints=True, amount_msat=amount_to_pay)
             try:
@@ -871,7 +936,7 @@ class TestPeer(ElectrumTestCase):
             # Dave is supposed to have failed the pending incomplete MPP HTLCs
             self.assertEqual(0, len(graph.chan_dc.hm.htlcs(LOCAL)))
             self.assertEqual(0, len(graph.chan_dc.hm.htlcs(REMOTE)))
-            raise TestSuccess()
+            raise SuccessfulTest()
 
         async def f():
             async with TaskGroup() as group:
@@ -881,7 +946,7 @@ class TestPeer(ElectrumTestCase):
                 await asyncio.sleep(0.2)
                 await group.spawn(pay())
 
-        with self.assertRaises(TestSuccess):
+        with self.assertRaises(SuccessfulTest):
             run(f())
 
     @needs_test_with_all_chacha20_implementations
@@ -892,7 +957,7 @@ class TestPeer(ElectrumTestCase):
         w2.network.config.set_key('dynamic_fees', False)
         w1.network.config.set_key('fee_per_kb', 5000)
         w2.network.config.set_key('fee_per_kb', 1000)
-        w2.enable_htlc_settle.clear()
+        w2.enable_htlc_settle = False
         lnaddr, pay_req = run(self.prepare_invoice(w2))
         async def pay():
             await asyncio.wait_for(p1.initialized, 1)
@@ -911,7 +976,7 @@ class TestPeer(ElectrumTestCase):
             gath.cancel()
         async def set_settle():
             await asyncio.sleep(0.1)
-            w2.enable_htlc_settle.set()
+            w2.enable_htlc_settle = True
         gath = asyncio.gather(pay(), set_settle(), p1._message_loop(), p2._message_loop(), p1.htlc_switch(), p2.htlc_switch())
         async def f():
             await gath
@@ -1022,6 +1087,95 @@ class TestPeer(ElectrumTestCase):
             await asyncio.gather(pay, p1._message_loop(), p2._message_loop(), p1.htlc_switch(), p2.htlc_switch())
         with self.assertRaises(PaymentFailure):
             run(f())
+
+    @needs_test_with_all_chacha20_implementations
+    def test_sending_weird_messages_that_should_be_ignored(self):
+        alice_channel, bob_channel = create_test_channels()
+        p1, p2, w1, w2, _q1, _q2 = self.prepare_peers(alice_channel, bob_channel)
+
+        async def send_weird_messages():
+            await asyncio.wait_for(p1.initialized, 1)
+            await asyncio.wait_for(p2.initialized, 1)
+            # peer1 sends known message with trailing garbage
+            # BOLT-01 says peer2 should ignore trailing garbage
+            raw_msg1 = encode_msg('ping', num_pong_bytes=4, byteslen=4) + bytes(range(55))
+            p1.transport.send_bytes(raw_msg1)
+            await asyncio.sleep(0.05)
+            # peer1 sends unknown 'odd-type' message
+            # BOLT-01 says peer2 should ignore whole message
+            raw_msg2 = (43333).to_bytes(length=2, byteorder="big") + bytes(range(55))
+            p1.transport.send_bytes(raw_msg2)
+            await asyncio.sleep(0.05)
+            raise SuccessfulTest()
+
+        async def f():
+            async with TaskGroup() as group:
+                for peer in [p1, p2]:
+                    await group.spawn(peer._message_loop())
+                    await group.spawn(peer.htlc_switch())
+                await asyncio.sleep(0.2)
+                await group.spawn(send_weird_messages())
+
+        with self.assertRaises(SuccessfulTest):
+            run(f())
+
+    @needs_test_with_all_chacha20_implementations
+    def test_sending_weird_messages__unknown_even_type(self):
+        alice_channel, bob_channel = create_test_channels()
+        p1, p2, w1, w2, _q1, _q2 = self.prepare_peers(alice_channel, bob_channel)
+
+        async def send_weird_messages():
+            await asyncio.wait_for(p1.initialized, 1)
+            await asyncio.wait_for(p2.initialized, 1)
+            # peer1 sends unknown 'even-type' message
+            # BOLT-01 says peer2 should close the connection
+            raw_msg2 = (43334).to_bytes(length=2, byteorder="big") + bytes(range(55))
+            p1.transport.send_bytes(raw_msg2)
+            await asyncio.sleep(0.05)
+
+        failing_task = None
+        async def f():
+            nonlocal failing_task
+            async with TaskGroup() as group:
+                await group.spawn(p1._message_loop())
+                await group.spawn(p1.htlc_switch())
+                failing_task = await group.spawn(p2._message_loop())
+                await group.spawn(p2.htlc_switch())
+                await asyncio.sleep(0.2)
+                await group.spawn(send_weird_messages())
+
+        with self.assertRaises(lnmsg.UnknownMandatoryMsgType):
+            run(f())
+        self.assertTrue(isinstance(failing_task.exception(), lnmsg.UnknownMandatoryMsgType))
+
+    @needs_test_with_all_chacha20_implementations
+    def test_sending_weird_messages__known_msg_with_insufficient_length(self):
+        alice_channel, bob_channel = create_test_channels()
+        p1, p2, w1, w2, _q1, _q2 = self.prepare_peers(alice_channel, bob_channel)
+
+        async def send_weird_messages():
+            await asyncio.wait_for(p1.initialized, 1)
+            await asyncio.wait_for(p2.initialized, 1)
+            # peer1 sends known message with insufficient length for the contents
+            # BOLT-01 says peer2 should fail the connection
+            raw_msg1 = encode_msg('ping', num_pong_bytes=4, byteslen=4)[:-1]
+            p1.transport.send_bytes(raw_msg1)
+            await asyncio.sleep(0.05)
+
+        failing_task = None
+        async def f():
+            nonlocal failing_task
+            async with TaskGroup() as group:
+                await group.spawn(p1._message_loop())
+                await group.spawn(p1.htlc_switch())
+                failing_task = await group.spawn(p2._message_loop())
+                await group.spawn(p2.htlc_switch())
+                await asyncio.sleep(0.2)
+                await group.spawn(send_weird_messages())
+
+        with self.assertRaises(lnmsg.UnexpectedEndOfStream):
+            run(f())
+        self.assertTrue(isinstance(failing_task.exception(), lnmsg.UnexpectedEndOfStream))
 
 
 def run(coro):

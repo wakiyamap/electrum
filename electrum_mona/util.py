@@ -427,12 +427,6 @@ def android_data_dir():
     PythonActivity = jnius.autoclass('org.kivy.android.PythonActivity')
     return PythonActivity.mActivity.getFilesDir().getPath() + '/data'
 
-def get_backup_dir(config):
-    if 'ANDROID_DATA' in os.environ:
-        return android_backup_dir() if config.get('android_backups') else None
-    else:
-        return config.get('backup_dir')
-
 def ensure_sparse_file(filename):
     # On modern Linux, no need to do anything.
     # On Windows, need to explicitly mark file.
@@ -887,7 +881,7 @@ def parse_URI(uri: str, on_pr: Callable = None, *, loop=None) -> dict:
             m = re.match(r'([0-9.]+)X([0-9])', am)
             if m:
                 k = int(m.group(2)) - 8
-                amount = Decimal(m.group(1)) * pow(  Decimal(10) , k)
+                amount = Decimal(m.group(1)) * pow(Decimal(10), k)
             else:
                 amount = Decimal(am) * COIN
             out['amount'] = int(amount)

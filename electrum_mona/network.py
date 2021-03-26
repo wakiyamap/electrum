@@ -167,7 +167,7 @@ def deserialize_proxy(s: str) -> Optional[dict]:
         return None
     if s.lower() == 'none':
         return None
-    proxy = { "mode":"socks5", "host":"localhost" }
+    proxy = {"mode":"socks5", "host":"localhost"}
     # FIXME raw IPv6 address fails here
     args = s.split(':')
     n = 0
@@ -534,13 +534,14 @@ class Network(Logger, NetworkRetryManager[ServerAddr]):
                 return {}
             return self.interface.fee_estimates_eta
 
-    def update_fee_estimates(self):
-        e = self.get_fee_estimates()
-        for nblock_target, fee in e.items():
+    def update_fee_estimates(self, *, fee_est: Dict = None):
+        if fee_est is None:
+            fee_est = self.get_fee_estimates()
+        for nblock_target, fee in fee_est.items():
             self.config.update_fee_estimates(nblock_target, fee)
-        if not hasattr(self, "_prev_fee_est") or self._prev_fee_est != e:
-            self._prev_fee_est = copy.copy(e)
-            self.logger.info(f'fee_estimates {e}')
+        if not hasattr(self, "_prev_fee_est") or self._prev_fee_est != fee_est:
+            self._prev_fee_est = copy.copy(fee_est)
+            self.logger.info(f'fee_estimates {fee_est}')
         self.notify('fee')
 
     @with_recent_servers_lock
@@ -636,6 +637,7 @@ class Network(Logger, NetworkRetryManager[ServerAddr]):
                 await self.switch_to_interface(server)
             else:
                 await self.switch_lagging_interface()
+        util.trigger_callback('network_updated')
 
     def _maybe_set_oneserver(self) -> None:
         oneserver = bool(self.config.get('oneserver', False))

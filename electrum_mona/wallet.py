@@ -57,7 +57,6 @@ from .util import (NotEnoughFunds, UserCancelled, profiler,
                    WalletFileException, BitcoinException, MultipleSpendMaxTxOutputs,
                    InvalidPassword, format_time, timestamp_to_datetime, Satoshis,
                    Fiat, bfh, bh2u, TxMinedInfo, quantize_feerate, create_bip21_uri, OrderedDictWithIndex)
-from .util import get_backup_dir
 from .simple_config import SimpleConfig, FEE_RATIO_HIGH_WARNING, FEERATE_WARNING_HIGH_FEE
 from .bitcoin import COIN, TYPE_ADDRESS
 from .bitcoin import is_address, address_to_script, is_minikey, relayfee, dust_threshold
@@ -315,10 +314,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         if self.storage:
             self.db.write(self.storage)
 
-    def save_backup(self):
-        backup_dir = get_backup_dir(self.config)
-        if backup_dir is None:
-            return
+    def save_backup(self, backup_dir):
         new_db = WalletDB(self.db.dump(), manual_upgrades=False)
 
         if self.lnworker:
@@ -326,6 +322,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
             for chan_id, chan in self.lnworker.channels.items():
                 channel_backups[chan_id.hex()] = self.lnworker.create_channel_backup(chan_id)
             new_db.put('channels', None)
+            new_db.put('lightning_xprv', None)
             new_db.put('lightning_privkey2', None)
 
         new_path = os.path.join(backup_dir, self.basename() + '.backup')
@@ -345,6 +342,7 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
 
     def init_lightning(self):
         assert self.can_have_lightning()
+        assert self.db.get('lightning_xprv') is None
         if self.db.get('lightning_privkey2'):
             return
         # TODO derive this deterministically from wallet.keystore at keystore generation time
@@ -887,9 +885,10 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
 
     def add_transaction(self, tx, *, allow_unrelated=False):
         tx_was_added = super().add_transaction(tx, allow_unrelated=allow_unrelated)
-
         if tx_was_added:
             self._maybe_set_tx_label_based_on_invoices(tx)
+            if self.lnworker:
+                self.lnworker.maybe_add_backup_from_tx(tx)
         return tx_was_added
 
     @profiler
@@ -2491,12 +2490,11 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
                     "otherwise you could end up paying a different fee."))
 
     def get_tx_fee_warning(
-            self,
-            *,
+            self, *,
             invoice_amt: int,
             tx_size: int,
-            fee: int,
-    ) -> Optional[Tuple[bool, str, str]]:
+            fee: int) -> Optional[Tuple[bool, str, str]]:
+
         feerate = Decimal(fee) / tx_size  # sat/byte
         fee_ratio = Decimal(fee) / invoice_amt if invoice_amt else 1
         long_warning = None
@@ -2504,20 +2502,19 @@ class Abstract_Wallet(AddressSynchronizer, ABC):
         allow_send = True
         if feerate < self.relayfee() / 1000:
             long_warning = (
-                    _("This transaction requires a higher fee, or it will not be propagated by your current server") + "\n"
-                    + _("Try to raise your transaction fee, or use a server with a lower relay fee.")
-            )
+                    _("This transaction requires a higher fee, or it will not be propagated by your current server.") + " "
+                    + _("Try to raise your transaction fee, or use a server with a lower relay fee."))
             short_warning = _("below relay fee") + "!"
             allow_send = False
         elif fee_ratio >= FEE_RATIO_HIGH_WARNING:
             long_warning = (
                     _('Warning') + ': ' + _("The fee for this transaction seems unusually high.")
-                    + f'\n({fee_ratio*100:.2f}% of amount)')
+                    + f' ({fee_ratio*100:.2f}% of amount)')
             short_warning = _("high fee ratio") + "!"
         elif feerate > FEERATE_WARNING_HIGH_FEE / 1000:
             long_warning = (
                     _('Warning') + ': ' + _("The fee for this transaction seems unusually high.")
-                    + f'\n(feerate: {feerate:.2f} sat/byte)')
+                    + f' (feerate: {feerate:.2f} sat/byte)')
             short_warning = _("high fee rate") + "!"
         if long_warning is None:
             return None
@@ -2760,11 +2757,8 @@ class Deterministic_Wallet(Abstract_Wallet):
         # generate addresses now. note that without libsecp this might block
         # for a few seconds!
         self.synchronize()
-
-        # create lightning keys
-        if self.can_have_lightning():
-            self.init_lightning()
-        ln_xprv = self.db.get('lightning_privkey2')
+        # lightning_privkey2 is not deterministic (legacy wallets, bip39)
+        ln_xprv = self.db.get('lightning_xprv') or self.db.get('lightning_privkey2')
         # lnworker can only be initialized once receiving addresses are available
         # therefore we instantiate lnworker in DeterministicWallet
         self.lnworker = LNWallet(self, ln_xprv) if ln_xprv else None
@@ -3145,6 +3139,8 @@ def create_new_wallet(*, path, config: SimpleConfig, passphrase=None, password=N
     k = keystore.from_seed(seed, passphrase)
     db.put('keystore', k.dump())
     db.put('wallet_type', 'standard')
+    if keystore.seed_type(seed) == 'segwit':
+        db.put('lightning_xprv', k.get_lightning_xprv(None))
     if gap_limit is not None:
         db.put('gap_limit', gap_limit)
     wallet = Wallet(db, storage, config=config)
@@ -3187,6 +3183,8 @@ def restore_wallet_from_text(text, *, path, config: SimpleConfig,
             k = keystore.from_master_key(text)
         elif keystore.is_seed(text):
             k = keystore.from_seed(text, passphrase)
+            if keystore.seed_type(text) == 'segwit':
+                db.put('lightning_xprv', k.get_lightning_xprv(None))
         else:
             raise Exception("Seed or key not recognized")
         db.put('keystore', k.dump())
@@ -3203,12 +3201,13 @@ def restore_wallet_from_text(text, *, path, config: SimpleConfig,
     return {'wallet': wallet, 'msg': msg}
 
 
-def check_password_for_directory(config: SimpleConfig, old_password, new_password=None) -> bool:
-    """Checks password against all wallets and returns True if they can all be updated.
+def check_password_for_directory(config: SimpleConfig, old_password, new_password=None) -> Tuple[bool, bool]:
+    """Checks password against all wallets, returns whether they can be unified and whether they are already.
     If new_password is not None, update all wallet passwords to new_password.
     """
     dirname = os.path.dirname(config.get_wallet_path())
     failed = []
+    is_unified = True
     for filename in os.listdir(dirname):
         path = os.path.join(dirname, filename)
         if not os.path.isfile(path):
@@ -3216,10 +3215,16 @@ def check_password_for_directory(config: SimpleConfig, old_password, new_passwor
         basename = os.path.basename(path)
         storage = WalletStorage(path)
         if not storage.is_encrypted():
+            is_unified = False
             # it is a bit wasteful load the wallet here, but that is fine
             # because we are progressively enforcing storage encryption.
-            db = WalletDB(storage.read(), manual_upgrades=False)
-            wallet = Wallet(db, storage, config=config)
+            try:
+                db = WalletDB(storage.read(), manual_upgrades=False)
+                wallet = Wallet(db, storage, config=config)
+            except:
+                _logger.exception(f'failed to load {basename}:')
+                failed.append(basename)
+                continue
             if wallet.has_keystore_encryption():
                 try:
                     wallet.check_password(old_password)
@@ -3240,8 +3245,13 @@ def check_password_for_directory(config: SimpleConfig, old_password, new_passwor
         except:
             failed.append(basename)
             continue
-        db = WalletDB(storage.read(), manual_upgrades=False)
-        wallet = Wallet(db, storage, config=config)
+        try:
+            db = WalletDB(storage.read(), manual_upgrades=False)
+            wallet = Wallet(db, storage, config=config)
+        except:
+            _logger.exception(f'failed to load {basename}:')
+            failed.append(basename)
+            continue
         try:
             wallet.check_password(old_password)
         except:
@@ -3249,10 +3259,20 @@ def check_password_for_directory(config: SimpleConfig, old_password, new_passwor
             continue
         if new_password:
             wallet.update_password(old_password, new_password)
-    return failed == []
+    can_be_unified = failed == []
+    is_unified = can_be_unified and is_unified
+    return can_be_unified, is_unified
 
 
 def update_password_for_directory(config: SimpleConfig, old_password, new_password) -> bool:
-    assert new_password is not None
-    assert check_password_for_directory(config, old_password, None)
-    return check_password_for_directory(config, old_password, new_password)
+    " returns whether password is unified "
+    if new_password is None:
+        # we opened a non-encrypted wallet
+        return False
+    can_be_unified, is_unified = check_password_for_directory(config, old_password, None)
+    if not can_be_unified:
+        return False
+    if is_unified and old_password == new_password:
+        return True
+    check_password_for_directory(config, old_password, new_password)
+    return True

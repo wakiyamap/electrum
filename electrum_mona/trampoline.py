@@ -58,13 +58,12 @@ TRAMPOLINE_NODES_MAINNET = {
     'Electrum trampoline02': LNPeerAddr(host='51.15.43.235', port=9735, pubkey=bytes.fromhex('03bb4962b8abf8a30574881631a4f1529c50dc1bfb64a173e05a05b84f15d4f9a2')),
 }
 TRAMPOLINE_NODES_TESTNET = {
-    'endurance': LNPeerAddr(host='34.250.234.192', port=9735, pubkey=bytes.fromhex('03933884aaf1d6b108397e5efe5c86bcf2d8ca8d2f700eda99db9214fc2712b134')),
 }
 
 def hardcoded_trampoline_nodes():
-    if constants.net in (constants.BitcoinMainnet, ):
+    if constants.net in (constants.BitcoinMainnet,):
         return TRAMPOLINE_NODES_MAINNET
-    if constants.net in (constants.BitcoinTestnet, ):
+    if constants.net in (constants.BitcoinTestnet,):
         return TRAMPOLINE_NODES_TESTNET
     return {}
 
@@ -107,6 +106,11 @@ def create_trampoline_route(
         params = TRAMPOLINE_FEES[trampoline_fee_level]
     else:
         raise NoPathFound()
+    # temporary fix: until ACINQ uses a proper feature bit to detect
+    # Phoenix, they might try to open channels when payments fail
+    if trampoline_node_id == TRAMPOLINE_NODES_MAINNET['Electrum trampoline02'].pubkey:
+        is_legacy = True
+        use_two_trampolines = False
     # add optional second trampoline
     trampoline2 = None
     if is_legacy and use_two_trampolines:

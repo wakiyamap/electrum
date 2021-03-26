@@ -30,7 +30,7 @@ from .transaction import BCDataStream
 if TYPE_CHECKING:
     from .lnchannel import Channel, AbstractChannel
     from .lnrouter import LNPaymentRoute
-    from .lnonion import OnionRoutingFailureMessage
+    from .lnonion import OnionRoutingFailure
 
 
 # defined in BOLT-03:
@@ -170,21 +170,13 @@ class ChannelConstraints(StoredObject):
 
 
 CHANNEL_BACKUP_VERSION = 0
+
 @attr.s
 class ChannelBackupStorage(StoredObject):
-    node_id = attr.ib(type=bytes, converter=hex_to_bytes)
-    privkey = attr.ib(type=bytes, converter=hex_to_bytes)
     funding_txid = attr.ib(type=str)
     funding_index = attr.ib(type=int, converter=int)
     funding_address = attr.ib(type=str)
-    host = attr.ib(type=str)
-    port = attr.ib(type=int, converter=int)
     is_initiator = attr.ib(type=bool)
-    channel_seed = attr.ib(type=bytes, converter=hex_to_bytes)
-    local_delay = attr.ib(type=int, converter=int)
-    remote_delay = attr.ib(type=int, converter=int)
-    remote_payment_pubkey = attr.ib(type=bytes, converter=hex_to_bytes)
-    remote_revocation_pubkey = attr.ib(type=bytes, converter=hex_to_bytes)
 
     def funding_outpoint(self):
         return Outpoint(self.funding_txid, self.funding_index)
@@ -192,6 +184,22 @@ class ChannelBackupStorage(StoredObject):
     def channel_id(self):
         chan_id, _ = channel_id_from_funding_tx(self.funding_txid, self.funding_index)
         return chan_id
+
+@attr.s
+class OnchainChannelBackupStorage(ChannelBackupStorage):
+    node_id_prefix = attr.ib(type=bytes, converter=hex_to_bytes)
+
+@attr.s
+class ImportedChannelBackupStorage(ChannelBackupStorage):
+    node_id = attr.ib(type=bytes, converter=hex_to_bytes)
+    privkey = attr.ib(type=bytes, converter=hex_to_bytes)
+    host = attr.ib(type=str)
+    port = attr.ib(type=int, converter=int)
+    channel_seed = attr.ib(type=bytes, converter=hex_to_bytes)
+    local_delay = attr.ib(type=int, converter=int)
+    remote_delay = attr.ib(type=int, converter=int)
+    remote_payment_pubkey = attr.ib(type=bytes, converter=hex_to_bytes)
+    remote_revocation_pubkey = attr.ib(type=bytes, converter=hex_to_bytes)
 
     def to_bytes(self) -> bytes:
         vds = BCDataStream()
@@ -218,7 +226,7 @@ class ChannelBackupStorage(StoredObject):
         version = vds.read_int16()
         if version != CHANNEL_BACKUP_VERSION:
             raise Exception(f"unknown version for channel backup: {version}")
-        return ChannelBackupStorage(
+        return ImportedChannelBackupStorage(
             is_initiator = vds.read_boolean(),
             privkey = vds.read_bytes(32).hex(),
             channel_seed = vds.read_bytes(32).hex(),
@@ -256,7 +264,7 @@ class HtlcLog(NamedTuple):
     route: Optional['LNPaymentRoute'] = None
     preimage: Optional[bytes] = None
     error_bytes: Optional[bytes] = None
-    failure_msg: Optional['OnionRoutingFailureMessage'] = None
+    failure_msg: Optional['OnionRoutingFailure'] = None
     sender_idx: Optional[int] = None
 
     def formatted_tuple(self):
@@ -289,6 +297,8 @@ class RemoteMisbehaving(LightningError): pass
 class UpfrontShutdownScriptViolation(RemoteMisbehaving): pass
 
 class NotFoundChanAnnouncementForUpdate(Exception): pass
+class InvalidGossipMsg(Exception):
+    """e.g. signature check failed"""
 
 class PaymentFailure(UserFacingException): pass
 class NoPathFound(PaymentFailure):
@@ -1164,7 +1174,13 @@ class LNPeerAddr:
 
 
 def get_compressed_pubkey_from_bech32(bech32_pubkey: str) -> bytes:
-    hrp, data_5bits = segwit_addr.bech32_decode(bech32_pubkey)
+    decoded_bech32 = segwit_addr.bech32_decode(bech32_pubkey)
+    hrp = decoded_bech32.hrp
+    data_5bits = decoded_bech32.data
+    if decoded_bech32.encoding is None:
+        raise ValueError("Bad bech32 checksum")
+    if decoded_bech32.encoding != segwit_addr.Encoding.BECH32:
+        raise ValueError("Bad bech32 encoding: must be using vanilla BECH32")
     if hrp != 'ln':
         raise Exception('unexpected hrp: {}'.format(hrp))
     data_8bits = segwit_addr.convertbits(data_5bits, 5, 8, False)
@@ -1238,6 +1254,7 @@ class LnKeyFamily(IntEnum):
     DELAY_BASE = 4 | BIP32_PRIME
     REVOCATION_ROOT = 5 | BIP32_PRIME
     NODE_KEY = 6
+    BACKUP_CIPHER = 7 | BIP32_PRIME
 
 
 def generate_keypair(node: BIP32Node, key_family: LnKeyFamily) -> Keypair:

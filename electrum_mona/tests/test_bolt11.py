@@ -6,6 +6,7 @@ import unittest
 
 from electrum_mona.lnaddr import shorten_amount, unshorten_amount, LnAddr, lnencode, lndecode, u5_to_bitarray, bitarray_to_u5
 from electrum_mona.segwit_addr import bech32_encode, bech32_decode
+from electrum_mona import segwit_addr
 from electrum_mona.lnutil import UnknownEvenFeatureBits, derive_payment_secret_from_payment_preimage, LnFeatures
 
 from . import ElectrumTestCase
@@ -18,6 +19,7 @@ PUBKEY=unhexlify('03e7156ae33b0a208d0744199163177e909e80176e55d97a2f221ede0f934d
 
 
 class TestBolt11(ElectrumTestCase):
+    maxDiff = None
     def test_shorten_amount(self):
         tests = {
             Decimal(10)/10**12: '10p',
@@ -60,54 +62,75 @@ class TestBolt11(ElectrumTestCase):
                           ' one lollypop, one piece of cherry pie, one sausage, one'
                           ' cupcake, and one slice of watermelon')
 
-
+        timestamp = 1615922274
         tests = [
-            LnAddr(paymenthash=RHASH, tags=[('d', '')]),
-            LnAddr(paymenthash=RHASH, amount=Decimal('0.001'), tags=[('d', '1 cup coffee'), ('x', 60)]),
-            LnAddr(paymenthash=RHASH, amount=Decimal('1'), tags=[('h', longdescription)]),
-            LnAddr(paymenthash=RHASH, currency='tmona', tags=[('f', 'mivTxWUqB6yxQdbLnAfcTSaVXouAhTUDfs'), ('h', longdescription)]),
-            LnAddr(paymenthash=RHASH, amount=24, tags=[
+            (LnAddr(date=timestamp, paymenthash=RHASH, tags=[('d', '')]),
+             "lnmona1ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdqqyhhfge73xtqkqr3ca22rvu3hyxfmesxahwyxdh3tya02p7x7ah3qt6zz4s5yn25z6hh4urf8c3598sdl8zxjpph0fg35y0kfn8vq6vsqd340h9"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=Decimal('0.001'), tags=[('d', '1 cup coffee'), ('x', 60)]),
+             "lnmona1m1ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdq5xysxxatsyp3k7enxv4jsxqzpu206axye9c7fz0sc6y6f2e97l48mgpxv3r6v5k8rt7ce082fl64vskpcxvypnmjeg5amxe79sylp900rxgv2k8el535c0y22807v4ggsqglal97"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=Decimal('1'), tags=[('h', longdescription)]),
+             "lnmona11ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqs2hgyzzwfazhwxpj3edw9rw3gmsmcl3ktrzdeh3nkldnhzc0g6gfpkg3sqzx2dhuzetqsq6weypkegn3sfcg2tqyv0eyf6u7yq8rqw3gp764v5x"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, currency='tmona', tags=[('f', 'mivTxWUqB6yxQdbLnAfcTSaVXouAhTUDfs'), ('h', longdescription)]),
+             "lntmona1ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqfpp3y4dtfd4mcpuul3wmteaxatgldveymxxyhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqsq06ue05mjfwgnra27g6tnhzywtj7qh5rhuutf77apa7dclddp4nz0zwjcvqm4j8fd2pm2u8rwultx232yvdxsmh5fueffjexfuzn40gpaz4tq5"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=24, tags=[
                 ('r', [(unhexlify('029e03a901b85534ff1e92c43c74431f7ce72046060fcf7a95c37e148f78c77255'), unhexlify('0102030405060708'), 1, 20, 3),
                        (unhexlify('039e03a901b85534ff1e92c43c74431f7ce72046060fcf7a95c37e148f78c77255'), unhexlify('030405060708090a'), 2, 30, 4)]),
                 ('f', 'MRHx4jW2KAQeEDMuK7pGLUGWvPRQT1Epmj'),
                 ('h', longdescription)]),
-            LnAddr(paymenthash=RHASH, amount=24, tags=[('f', 'PHjTKtgYLTJ9D2Bzw2f6xBB41KBm2HeGfg'), ('h', longdescription)]),
-            LnAddr(paymenthash=RHASH, amount=24, tags=[('f', 'mona1quunc907zfyj7cyxhnp9584rj0wmdka2ec9w3af'), ('h', longdescription)]),
-            LnAddr(paymenthash=RHASH, amount=24, tags=[('f', 'mona1qp8f842ywwr9h5rdxyzggex7q3trvvvaarfssxccju52rj6htfzfsqr79j2'), ('h', longdescription)]),
-            LnAddr(paymenthash=RHASH, amount=24, tags=[('n', PUBKEY), ('h', longdescription)]),
-            LnAddr(paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 514)]),
-            LnAddr(paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 10 + (1 << 8))]),
-            LnAddr(paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 10 + (1 << 9))]),
-            LnAddr(paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 10 + (1 << 7) + (1 << 11))]),
-            LnAddr(paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 10 + (1 << 12))]),
-            LnAddr(paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 10 + (1 << 13))]),
-            LnAddr(paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 10 + (1 << 9) + (1 << 14))]),
-            LnAddr(paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 10 + (1 << 9) + (1 << 15))]),
-            LnAddr(paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 33282)], payment_secret=b"\x11" * 32),
+             "lnmona241ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqr9yq20q82gphp2nflc7jtzrcazrra7wwgzxqc8u7754cdlpfrmccae92qgzqvzq2ps8pqqqqqqpqqqqq9qqqvpeuqafqxu92d8lr6fvg0r5gv0heeeqgcrqlnm6jhphu9y00rrhy4grqszsvpcgpy9qqqqqqgqqqqq7qqzqfpp3hmyccldvzvekns7z4cmvu0lsg7stk9r2hp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqs0m55wzqx4wrwhx27e9q830ua7gf0q8ft8axr6td50ztezsh84ra4ql6za2yk8462x4c7n3agqvtc6rxaug7f8udpv7faq0czepz3q0gp5zm5qk"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=24, tags=[('f', 'PHjTKtgYLTJ9D2Bzw2f6xBB41KBm2HeGfg'), ('h', longdescription)]),
+             "lnmona241ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqfppjv3yl26xfe53hsyu0ycmwz4n3z2scf20ghp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqs94ex52vmwdkq0rsxjr8r7k8k40egy745aqlws0yk7j793zv5tqfq4arqjlw7peu8r62hvpkcqjquuztgst47vpzqzt8ju8c36gqx2tgp3jmyzn"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=24, tags=[('f', 'mona1quunc907zfyj7cyxhnp9584rj0wmdka2ec9w3af'), ('h', longdescription)]),
+             "lnmona241ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqfppquunc907zfyj7cyxhnp9584rj0wmdka2ehp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqsqvn67ssxdtqakqvxfy4lsen8sqw4pzd2j230lz7dx6chd737csyjcfe93dc4s099faaeg37us2dzt0pwfrtfnp429k40vfu06qpf28squq5wy0"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=24, tags=[('f', 'mona1qp8f842ywwr9h5rdxyzggex7q3trvvvaarfssxccju52rj6htfzfsqr79j2'), ('h', longdescription)]),
+             "lnmona241ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqfp4qp8f842ywwr9h5rdxyzggex7q3trvvvaarfssxccju52rj6htfzfshp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqsd45jh4k2e8jvhzpthqyc2sspr30k3pg67f4a973qumvw48t4gzl4tdr9qh7p04z5afghspsapvp3tahcq7rasw7dtv2vv46sm79479qpm9jdjl"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=24, tags=[('n', PUBKEY), ('h', longdescription)]),
+             "lnmona241ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqnp4q0n326hr8v9zprg8gsvezcch06gfaqqhde2aj730yg0durunfhv66hp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqsdcmmg0p9qn003ls0r8dv2f9d7xh7lfx6lsha7h5azxzfdd292r4yuflmhs3dkkghmzaecedwzrvxktsnrhcfmsnx7r64chxw5phrwggq32hqsz"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 514)]),
+             "lnmona241ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqs9qzszz2jjnvrh9rg877px70r5cfrf0vqwzws0jxmcg3d4pqg0ml337s8qsmxjyedvssge254qjwucnjy3rtzr7gxzfatsy3ad5x4c0ll93acq3rwstg"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 10 + (1 << 8))]),
+             "lnmona241ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqs9qzg2vwag8ax9f9wkmsz37nvq8qkq53tpznev8jjnkezq7u8qzzytad85zhxgk7hqgqkqrftazq8hfr6lv9q4j4vk2ld6ymrjtsnumetlhjqqe7cl7z"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 10 + (1 << 9))]),
+             "lnmona241ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqs9qzs2p8uyuepjhdpyfsv6xuc0enx57upz4sdz0n38s7mfc07lpm5vvc9zdursykxpz8heddckdg2d6wsjltuf93rrewptuekp5s9w06wucacqgjaara"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 10 + (1 << 7) + (1 << 11))]),
+             "lnmona241ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqs9qrzy2xw96qw57wvauu8skgsvlpnvqluwy4txpm7pw3q9r70lryezhvjrjj9f7tuage9une2hn26quv9fpm9wa4h672288m5ek4jk4gh2cm5sqlkg3yn"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 10 + (1 << 12))]),
+             "lnmona241ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqs9qryq29tefcvke7zl35fjehvn0t3vnw2uae766g7gxuj23tk4vfsxjzk2n45vnms6ew2pvydlhy7vfxptnwcs0x7qjuct0feg4vryzl3trvlspfvn5v7"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 10 + (1 << 13))]),
+             "lnmona241ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqs9qrgq2yctvzkmsa8w0elyd7gx5wp5lflsx8wsqw5l2ejytgd3q5qrwjkckvqsjamwq93eekje8qwzphsjh9hcy3lmpvrdlks8tmutuad3k9eqquhzhfz"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 10 + (1 << 9) + (1 << 14))]),
+             "lnmona241ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqs9qrss2dccexrncjpgvjfy93t507h07l63qt7k7fp3zeptdqadv9jmulu6hfa6syjwqqrvjf3a9fu50ap0vtjtrmyrqzjg46are0apf6hq6ztqqfhkr7e"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 10 + (1 << 9) + (1 << 15))]),
+             "lnmona241ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqs9qypqs29trq3u6ctz9qnm4hate5u74f0w6j4tcjj3wr79czn4n48egmze98kwk8wt6e6cj5890jpd8dvwfttua2qullslfyf04save5fnvgp9sqkusukq"),
+            (LnAddr(date=timestamp, paymenthash=RHASH, amount=24, tags=[('h', longdescription), ('9', 33282)], payment_secret=b"\x11" * 32),
+             "lnmona241ps9zprzpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygshp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqs9qypqsz29tu4q7pmhu58qywk2mfd5vpuscy308del7mq76pywkqtjz36f240cgcxrpuzzzzprw7gvnwvwn6vxnpm7dtg2t258f0zy0zl7ldnrcpvzyrkz"),
         ]
 
         # Roundtrip
-        for t in tests:
-            o = lndecode(lnencode(t, PRIVKEY), expected_hrp=t.currency)
-            self.compare(t, o)
+        for lnaddr1, invoice_str1 in tests:
+            invoice_str2 = lnencode(lnaddr1, PRIVKEY)
+            self.assertEqual(invoice_str1, invoice_str2)
+            lnaddr2 = lndecode(invoice_str2, expected_hrp=lnaddr1.currency)
+            self.compare(lnaddr1, lnaddr2)
 
     def test_n_decoding(self):
         # We flip the signature recovery bit, which would normally give a different
         # pubkey.
-        hrp, data = bech32_decode(lnencode(LnAddr(paymenthash=RHASH, amount=24, tags=[('d', '')]), PRIVKEY), True)
+        _, hrp, data = bech32_decode(
+            lnencode(LnAddr(paymenthash=RHASH, amount=24, tags=[('d', '')]), PRIVKEY),
+            ignore_long_length=True)
         databits = u5_to_bitarray(data)
         databits.invert(-1)
-        lnaddr = lndecode(bech32_encode(hrp, bitarray_to_u5(databits)), verbose=True)
+        lnaddr = lndecode(bech32_encode(segwit_addr.Encoding.BECH32, hrp, bitarray_to_u5(databits)), verbose=True)
         assert lnaddr.pubkey.serialize() != PUBKEY
 
         # But not if we supply expliciy `n` specifier!
-        hrp, data = bech32_decode(lnencode(LnAddr(paymenthash=RHASH, amount=24,
-                                                  tags=[('d', ''),
-                                                        ('n', PUBKEY)]),
-                                           PRIVKEY), True)
+        _, hrp, data = bech32_decode(
+            lnencode(LnAddr(paymenthash=RHASH, amount=24, tags=[('d', ''), ('n', PUBKEY)]), PRIVKEY),
+            ignore_long_length=True)
         databits = u5_to_bitarray(data)
         databits.invert(-1)
-        lnaddr = lndecode(bech32_encode(hrp, bitarray_to_u5(databits)), verbose=True)
+        lnaddr = lndecode(bech32_encode(segwit_addr.Encoding.BECH32, hrp, bitarray_to_u5(databits)), verbose=True)
         assert lnaddr.pubkey.serialize() == PUBKEY
 
     def test_min_final_cltv_expiry_decoding(self):

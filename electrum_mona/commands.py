@@ -54,6 +54,7 @@ from .address_synchronizer import TX_HEIGHT_LOCAL
 from .mnemonic import Mnemonic
 from .lnutil import SENT, RECEIVED
 from .lnutil import LnFeatures
+from .lnutil import extract_nodeid
 from .lnpeer import channel_id_from_funding_tx
 from .plugin import run_hook
 from .version import ELECTRUM_VERSION
@@ -209,7 +210,8 @@ class Commands:
     @command('n')
     async def stop(self):
         """Stop daemon"""
-        self.daemon.stop()
+        # TODO it would be nice if this could stop the GUI too
+        await self.daemon.stop()
         return "Daemon stopped"
 
     @command('n')
@@ -391,11 +393,16 @@ class Commands:
     @command('wp')
     async def signtransaction(self, tx, privkey=None, password=None, wallet: Abstract_Wallet = None):
         """Sign a transaction. The wallet keys will be used unless a private key is provided."""
+        # TODO this command should be split in two... (1) *_with_wallet, (2) *_with_privkey
         tx = tx_from_any(tx)
         if privkey:
             txin_type, privkey2, compressed = bitcoin.deserialize_privkey(privkey)
-            pubkey = ecc.ECPrivkey(privkey2).get_public_key_bytes(compressed=compressed).hex()
-            tx.sign({pubkey:(privkey2, compressed)})
+            pubkey = ecc.ECPrivkey(privkey2).get_public_key_bytes(compressed=compressed)
+            for txin in tx.inputs():
+                if txin.address and txin.address == bitcoin.pubkey_to_address(txin_type, pubkey.hex()):
+                    txin.pubkeys = [pubkey]
+                    txin.script_type = txin_type
+            tx.sign({pubkey.hex(): (privkey2, compressed)})
         else:
             wallet.sign_transaction(tx, password)
         return tx.serialize()
@@ -996,9 +1003,11 @@ class Commands:
         funding_sat = satoshis(amount)
         push_sat = satoshis(push_amount)
         coins = wallet.get_spendable_coins(None)
+        node_id, rest = extract_nodeid(connection_string)
         funding_tx = wallet.lnworker.mktx_for_open_channel(
             coins=coins,
             funding_sat=funding_sat,
+            node_id=node_id,
             fee_est=None)
         chan, funding_tx = await wallet.lnworker._open_channel_coroutine(
             connect_str=connection_string,
@@ -1070,14 +1079,13 @@ class Commands:
 
     @command('n')
     async def inject_fees(self, fees):
-        import ast
-        self.network.config.fee_estimates = ast.literal_eval(fees)
-        self.network.notify('fee')
+        # e.g. use from Qt console:  inject_fees("{25: 1009, 10: 15962, 5: 18183, 2: 23239}")
+        fee_est = ast.literal_eval(fees)
+        self.network.update_fee_estimates(fee_est=fee_est)
 
     @command('wn')
     async def enable_htlc_settle(self, b: bool, wallet: Abstract_Wallet = None):
-        e = wallet.lnworker.enable_htlc_settle
-        e.set() if b else e.clear()
+        wallet.lnworker.enable_htlc_settle = b
 
     @command('n')
     async def clear_ln_blacklist(self):
@@ -1096,10 +1104,15 @@ class Commands:
         return await coro
 
     @command('wn')
-    async def request_force_close(self, channel_point, wallet: Abstract_Wallet = None):
+    async def request_force_close(self, channel_point, connection_string=None, wallet: Abstract_Wallet = None):
+        """
+        Requests the remote to force close a channel.
+        If a connection string is passed, can be used without having state or any backup for the channel.
+        Assumes that channel was originally opened with the same local peer (node_keypair).
+        """
         txid, index = channel_point.split(':')
         chan_id, _ = channel_id_from_funding_tx(txid, int(index))
-        return await wallet.lnworker.request_force_close_from_backup(chan_id)
+        await wallet.lnworker.request_force_close(chan_id, connect_str=connection_string)
 
     @command('w')
     async def export_channel_backup(self, channel_point, wallet: Abstract_Wallet = None):
@@ -1264,6 +1277,7 @@ command_options = {
     'to_height':   (None, "Only show transactions that confirmed before given block height"),
     'iknowwhatimdoing': (None, "Acknowledge that I understand the full implications of what I am about to do"),
     'gossip':      (None, "Apply command to gossip node instead of wallet"),
+    'connection_string':      (None, "Lightning network node ID or network address"),
 }
 
 

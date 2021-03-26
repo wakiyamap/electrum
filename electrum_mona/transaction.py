@@ -642,7 +642,7 @@ class Transaction:
             #       We assume low S (as that is a bitcoin standardness rule).
             #       We do not assume low R (even though the sigs we create conform), as external sigs,
             #       e.g. from a hw signer cannot be expected to have a low R.
-            sig_list = [ "00" * 72 ] * num_sig
+            sig_list = ["00" * 72] * num_sig
         else:
             pk_list = [pubkey.hex() for pubkey in txin.pubkeys]
             sig_list = [txin.part_sigs.get(pubkey, b'').hex() for pubkey in txin.pubkeys]
@@ -687,7 +687,7 @@ class Transaction:
         # the estimation will not be precise.
         if addr is None:
             return 'p2wpkh'
-        witver, witprog = segwit_addr.decode(constants.net.SEGWIT_HRP, addr)
+        witver, witprog = segwit_addr.decode_segwit_address(constants.net.SEGWIT_HRP, addr)
         if witprog is not None:
             return 'p2wpkh'
         addrtype, hash_160_ = b58_address_to_hash160(addr)
