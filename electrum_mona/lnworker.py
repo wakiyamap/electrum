@@ -1112,7 +1112,7 @@ class LNWallet(LNWorker):
             # todo: compare to the fee of the actual route we found
             if fwd_trampoline_fee < 1000:
                 raise OnionRoutingFailure(code=OnionFailureCode.TRAMPOLINE_FEE_INSUFFICIENT, data=b'')
-            if fwd_trampoline_cltv_delta < 3840:
+            if fwd_trampoline_cltv_delta < 960:
                 raise OnionRoutingFailure(code=OnionFailureCode.TRAMPOLINE_EXPIRY_TOO_SOON, data=b'')
 
         self.logs[payment_hash.hex()] = log = []
