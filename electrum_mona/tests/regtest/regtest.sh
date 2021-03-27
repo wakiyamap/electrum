@@ -224,7 +224,7 @@ if [[ $1 == "redeem_htlcs" ]]; then
     sleep 3
     echo "alice balance after CSV" $($alice getbalance)
     # fixme: add local to getbalance
-    wait_for_balance alice $(echo "$balance_before - 0.02" | bc -l)
+    wait_for_balance alice $(echo "$balance_before - 0.05" | bc -l)
     $alice getbalance
 fi
 
