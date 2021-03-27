@@ -86,7 +86,7 @@ jobs:
         electrum_mona/tests/regtest/start_electrumx.sh
     - name: script
       run: |
-        python -m unittest electrum_mona/tests/regtest.py
+        python3 -m unittest electrum_mona/tests/regtest.py
 
   analyze:
     runs-on: ubuntu-latest
