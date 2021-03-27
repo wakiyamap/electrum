@@ -54,8 +54,8 @@ TRAMPOLINE_FEES = [
 # hardcoded list
 # TODO for some pubkeys, there are multiple network addresses we could try
 TRAMPOLINE_NODES_MAINNET = {
-    'Electrum trampoline01':               LNPeerAddr(host='153.126.146.182',          port=9735, pubkey=bytes.fromhex('02af0e7b05a3fd83d1ecfcf9fd1416e6a7052fcd4d6a82aa4632a0de3f20787a15')),
-    'Electrum trampoline02': LNPeerAddr(host='51.15.43.235', port=9735, pubkey=bytes.fromhex('03bb4962b8abf8a30574881631a4f1529c50dc1bfb64a173e05a05b84f15d4f9a2')),
+    'x tamafo': LNPeerAddr(host='electrumx.tamami-foundation.org', port=9735, pubkey=bytes.fromhex('02af0e7b05a3fd83d1ecfcf9fd1416e6a7052fcd4d6a82aa4632a0de3f20787a15')),
+    'x1 ninja': LNPeerAddr(host='electrumx1.monacoin.ninja', port=9736, pubkey=bytes.fromhex('03bb4962b8abf8a30574881631a4f1529c50dc1bfb64a173e05a05b84f15d4f9a2')),
 }
 TRAMPOLINE_NODES_TESTNET = {
 }
@@ -108,7 +108,7 @@ def create_trampoline_route(
         raise NoPathFound()
     # temporary fix: until ACINQ uses a proper feature bit to detect
     # Phoenix, they might try to open channels when payments fail
-    if trampoline_node_id == TRAMPOLINE_NODES_MAINNET['Electrum trampoline02'].pubkey:
+    if trampoline_node_id == TRAMPOLINE_NODES_MAINNET['x1 ninja'].pubkey:
         is_legacy = True
         use_two_trampolines = False
     # add optional second trampoline
