@@ -9,6 +9,7 @@ from electrum_mona.gui.kivy.i18n import _
 from electrum_mona.plugin import run_hook
 from electrum_mona import coinchooser
 
+from electrum_mona.gui import messages
 from electrum_mona.gui.kivy import KIVY_GUI_PATH
 
 from .choice_dialog import ChoiceDialog
@@ -155,11 +156,7 @@ class SettingsDialog(Factory.Popup):
         self._unit_dialog.open()
 
     def routing_dialog(self, item, dt):
-        description = \
-            _('Lightning payments require finding a path through the Lightning Network.')\
-            + ' ' + ('You may use trampoline routing, or local routing (gossip).')\
-            + ' ' + ('Downloading the network gossip uses quite some bandwidth and storage, and is not recommended on mobile devices.')\
-            + ' ' + ('If you use trampoline, you can only open channels with trampoline nodes.')
+        description = _(messages.MSG_HELP_TRAMPOLINE)
         def cb(text):
             self.app.use_gossip = (text == 'Gossip')
         dialog = ChoiceDialog(

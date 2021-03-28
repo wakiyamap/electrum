@@ -57,6 +57,7 @@ TRAMPOLINE_NODES_MAINNET = {
     'x tamafo': LNPeerAddr(host='electrumx.tamami-foundation.org', port=9735, pubkey=bytes.fromhex('02af0e7b05a3fd83d1ecfcf9fd1416e6a7052fcd4d6a82aa4632a0de3f20787a15')),
     'x1 ninja': LNPeerAddr(host='electrumx1.monacoin.ninja', port=9736, pubkey=bytes.fromhex('03bb4962b8abf8a30574881631a4f1529c50dc1bfb64a173e05a05b84f15d4f9a2')),
 }
+
 TRAMPOLINE_NODES_TESTNET = {
 }
 

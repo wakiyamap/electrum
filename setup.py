@@ -79,17 +79,10 @@ setup(
     package_dir={
         'electrum_mona': 'electrum_mona'
     },
-    package_data={
-        '': ['*.txt', '*.json', '*.ttf', '*.otf', '*.csv'],
-        'electrum_mona': [
-            'wordlist/*.txt',
-            'locale/*/LC_MESSAGES/electrum.mo',
-            'lnwire/*.csv',
-        ],
-        'electrum_mona.gui': [
-            'icons/*',
-        ],
-    },
+    # Note: MANIFEST.in lists what gets included in the tar.gz, and the
+    # package_data kwarg lists what gets put in site-packages when pip installing the tar.gz.
+    # By specifying include_package_data=True, MANIFEST.in becomes responsible for both.
+    include_package_data=True,
     scripts=['electrum_mona/electrum-mona'],
     data_files=data_files,
     description="Lightweight Monacoin Wallet",

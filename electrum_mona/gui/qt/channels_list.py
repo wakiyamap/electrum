@@ -119,7 +119,7 @@ class ChannelsList(MyTreeView):
         msg = _('Close channel?')
         force_cb = QCheckBox('Request force close from remote peer')
         tooltip = _(messages.MSG_REQUEST_FORCE_CLOSE)
-        tooltip = '<qt>' + tooltip + '</qt>' # rich text is word wrapped
+        tooltip = messages.to_rtf(tooltip)
         def on_checked(b):
             self.is_force_close = bool(b)
         force_cb.stateChanged.connect(on_checked)
@@ -406,6 +406,7 @@ class ChannelsList(MyTreeView):
             suggest_button.clicked.connect(on_suggest)
         else:
             from electrum_mona.lnworker import hardcoded_trampoline_nodes
+            vbox.addWidget(QLabel(_('Choose a trampoline node to open a channel with')))
             trampolines = hardcoded_trampoline_nodes()
             trampoline_names = list(trampolines.keys())
             trampoline_combo = QComboBox()
@@ -452,14 +453,15 @@ class ChannelsList(MyTreeView):
             h.addWidget(remote_nodeid, 0, 1, 1, 4)
             h.addWidget(suggest_button, 0, 5)
         else:
-            h.addWidget(QLabel(_('Trampoline Node')), 0, 0)
-            h.addWidget(trampoline_combo, 0, 1, 1, 3)
+            h.addWidget(QLabel(_('Trampoline')), 0, 0)
+            h.addWidget(trampoline_combo, 0, 1, 1, 4)
 
         h.addWidget(QLabel('Amount'), 2, 0)
         h.addWidget(amount_e, 2, 1)
         h.addWidget(max_button, 2, 2)
         h.addWidget(clear_button, 2, 3)
         vbox.addLayout(h)
+        vbox.addStretch()
         ok_button = OkButton(d)
         ok_button.setDefault(True)
         vbox.addLayout(Buttons(CancelButton(d), ok_button))
@@ -502,7 +504,7 @@ class ChannelFeature(ABC):
 
 class ChanFeatChannel(ChannelFeature):
     def tooltip(self) -> str:
-        return _("This is a complete channel")
+        return _("This is a channel")
     def icon(self) -> QIcon:
         return read_QIcon("lightning")
 
