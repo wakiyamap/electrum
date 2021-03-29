@@ -207,12 +207,13 @@ Builder.load_string(r'''
                 text: _('Open Channel')
                 disabled: not root.has_lightning
                 on_release: popup.app.popup_dialog('lightning_open_channel_dialog')
-            Button:
-                size_hint: 0.3, None
-                height: '48dp'
-                text: _('Swap')
-                disabled: not root.has_lightning
-                on_release: popup.app.popup_dialog('swap_dialog')
+# monacoin is OK?
+#            Button:
+#                size_hint: 0.3, None
+#                height: '48dp'
+#                text: _('Swap')
+#                disabled: not root.has_lightning
+#                on_release: popup.app.popup_dialog('swap_dialog')
             Button:
                 size_hint: 0.3, None
                 height: '48dp'
