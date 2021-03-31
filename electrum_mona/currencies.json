@@ -1,4 +1,8 @@
 {
+    "Bitbank": [
+        "BTC",
+        "JPY"
+    ],
     "Bittrex": [
         "DZD",
         "NAD",
@@ -173,9 +177,8 @@
         "SDG",
         "XAU"
     ],
-    "Bitbank": [
-        "BTC",
-        "JPY"
+    "bitrue": [
+        "XRP"
     ],
     "Coincheck": [
         "BTC",

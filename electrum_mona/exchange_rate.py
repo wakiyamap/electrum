@@ -166,6 +166,11 @@ class Bitbank(ExchangeBase):
         json = await self.get_json('public.bitbank.cc', '/mona_%s/ticker' % ccy.lower())
         return {ccy: Decimal(json['data']['last'])}
 
+class bitrue(ExchangeBase):
+    async def get_rates(self, ccy):
+        json = await self.get_json('www.bitrue.com/', '/api/v1/ticker/price?symbol=mona%s' % ccy)
+        return {ccy: Decimal(json['price'])}
+
 class Coincheck(ExchangeBase):
     async def get_rates(self, ccy):
         json = await self.get_json('coincheck.com', '/api/rate/mona_%s' % ccy.lower())
