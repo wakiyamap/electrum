@@ -1416,7 +1416,9 @@ class ElectrumWindow(App, Logger):
         elif self.wallet.can_have_lightning():
             root.dismiss()
             if self.wallet.can_have_deterministic_lightning():
-                msg = messages.MSG_LIGHTNING_SCB_WARNING + "\n" + _("Create lightning keys?")
+                msg = _(
+                    "Lightning is not enabled because this wallet was created with an old version of Electrum. "
+                    "Create lightning keys?")
             else:
                 msg = _(
                     "Warning: this wallet type does not support channel recovery from seed. "
@@ -1428,8 +1430,5 @@ class ElectrumWindow(App, Logger):
     def _enable_lightning(self, b):
         if not b:
             return
-        wallet_path = self.get_wallet_path()
         self.wallet.init_lightning(password=self.password)
         self.show_info(_('Lightning keys have been initialized.'))
-        self.stop_wallet()
-        self.load_wallet_by_name(wallet_path)
