@@ -106,7 +106,7 @@ info "generating locale"
     fi
     cd "$CONTRIB"/deterministic-build/electrum-locale
     # we want the binary to have only compiled (.mo) locale files; not source (.po) files
-    rm -rf "$ROOT_FOLDER/electrum/locale/"
+    rm -rf "$ROOT_FOLDER/electrum_mona/locale/"
     for i in ./locale/*; do
         dir="$ROOT_FOLDER/electrum_mona/$i/LC_MESSAGES"
         mkdir -p $dir
