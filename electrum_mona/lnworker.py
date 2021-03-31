@@ -32,7 +32,7 @@ from .util import NetworkRetryManager, JsonRPCClient
 from .lnutil import LN_MAX_FUNDING_SAT
 from .keystore import BIP32_KeyStore
 from .bitcoin import COIN
-from .bitcoin import opcodes, make_op_return, address_to_script
+from .bitcoin import opcodes, make_op_return, address_to_scripthash
 from .transaction import Transaction
 from .transaction import get_script_type_from_output_script
 from .crypto import sha256
@@ -819,6 +819,7 @@ class LNWallet(LNWorker):
                 'amount_msat': chan.balance(LOCAL, ctn=0),
                 'direction': 'received',
                 'timestamp': tx_height.timestamp,
+                'date': timestamp_to_datetime(tx_height.timestamp),
                 'fee_sat': None,
                 'fee_msat': None,
                 'height': tx_height.height,
@@ -838,6 +839,7 @@ class LNWallet(LNWorker):
                 'amount_msat': -chan.balance_minus_outgoing_htlcs(LOCAL),
                 'direction': 'sent',
                 'timestamp': tx_height.timestamp,
+                'date': timestamp_to_datetime(tx_height.timestamp),
                 'fee_sat': None,
                 'fee_msat': None,
                 'height': tx_height.height,
@@ -988,13 +990,13 @@ class LNWallet(LNWorker):
         return CB_MAGIC_BYTES + node_id[0:16]
 
     def decrypt_cb_data(self, encrypted_data, funding_address):
-        funding_scriptpubkey = bytes.fromhex(address_to_script(funding_address))
-        nonce = funding_scriptpubkey[0:12]
+        funding_scripthash = bytes.fromhex(address_to_scripthash(funding_address))
+        nonce = funding_scripthash[0:12]
         return chacha20_decrypt(key=self.backup_key, data=encrypted_data, nonce=nonce)
 
     def encrypt_cb_data(self, data, funding_address):
-        funding_scriptpubkey = bytes.fromhex(address_to_script(funding_address))
-        nonce = funding_scriptpubkey[0:12]
+        funding_scripthash = bytes.fromhex(address_to_scripthash(funding_address))
+        nonce = funding_scripthash[0:12]
         return chacha20_encrypt(key=self.backup_key, data=data, nonce=nonce)
 
     def mktx_for_open_channel(
@@ -2086,6 +2088,13 @@ class LNWallet(LNWorker):
         self.wallet.save_db()
         util.trigger_callback('channels_updated', self.wallet)
         self.lnwatcher.add_channel(cb.funding_outpoint.to_str(), cb.get_funding_address())
+
+    def has_conflicting_backup_with(self, remote_node_id: bytes):
+        """ Returns whether we have an active channel with this node on another device, using same local node id. """
+        channel_backup_peers = [
+            cb.node_id for cb in self.channel_backups.values()
+            if (not cb.is_closed() and cb.get_local_pubkey() == self.node_keypair.pubkey)]
+        return any(remote_node_id.startswith(cb_peer_nodeid) for cb_peer_nodeid in channel_backup_peers)
 
     def remove_channel_backup(self, channel_id):
         chan = self.channel_backups[channel_id]

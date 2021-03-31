@@ -123,6 +123,9 @@ class TestWalletKeystoreAddressIntegrityForMainnet(ElectrumTestCase):
         self.assertEqual(w.get_receiving_addresses()[0], 'mona1q3g5tmkmlvxryhh843v4dz026avatc0zz8fpnsg')
         self.assertEqual(w.get_change_addresses()[0], 'mona1qdy94n2q5qcp0kg7v9yzwe6wvfkhnvyzjad9y8q')
 
+        self.assertEqual('zprvAabC4ncjU4qVMNbpYZ5G4XqmKJoJN3EA4TVCodaPwyvEatrZpVYmWVHfKwS1fdq2uCdPyCmbjAjQ5FzeqHFSGv9KUmUFptTMAcyKzHiUM6Q',
+                         ks.get_lightning_xprv(None))
+
     @mock.patch.object(wallet.Abstract_Wallet, 'save_db')
     def test_electrum_seed_segwit_passphrase(self, mock_save_db):
         seed_words = 'bitter grass shiver impose acquire brush forget axis eager alone wine silver'
@@ -141,6 +144,9 @@ class TestWalletKeystoreAddressIntegrityForMainnet(ElectrumTestCase):
 
         self.assertEqual(w.get_receiving_addresses()[0], 'mona1qx94dutas7ysn2my645cyttujrms5d9p566vls6')
         self.assertEqual(w.get_change_addresses()[0], 'mona1qcywwsy87sdp8vz5rfjh3sxdv6rt95kujfnkn2f')
+
+        self.assertEqual('zprvAaoTFrze53KLvVYL8yL5H4sxoBFto98dgfTxFxcBepBPaEWStxpsdYqvNGxskGMTgX11bUtPiVj3aCe2jXFkAJQMi9RmksGBgFVwFM85Gir',
+                         ks.get_lightning_xprv(None))
 
     @mock.patch.object(wallet.Abstract_Wallet, 'save_db')
     def test_electrum_seed_old(self, mock_save_db):
