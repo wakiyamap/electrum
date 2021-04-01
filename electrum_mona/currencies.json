@@ -3,6 +3,9 @@
         "BTC",
         "JPY"
     ],
+    "bitFlyer": [
+        "JPY"
+    ],
     "Bittrex": [
         "DZD",
         "NAD",
