@@ -59,6 +59,7 @@ TRAMPOLINE_NODES_MAINNET = {
 }
 
 TRAMPOLINE_NODES_TESTNET = {
+    'x tamafo': LNPeerAddr(host='testnet-eclair.tamami-foundation.org', port=9735, pubkey=bytes.fromhex('0289141da174653124929121ab010631158ada2f18dbe3f33e4959f277b33a5049')),
 }
 
 def hardcoded_trampoline_nodes():
