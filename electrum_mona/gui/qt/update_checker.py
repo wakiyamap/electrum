@@ -20,7 +20,7 @@ from electrum_mona.network import Network
 
 
 class UpdateCheck(QDialog, Logger):
-    url = "https://electrum-mona.org/version"
+    url = "https://electrum-mona.org/electrum_mona_version"
     download_url = "https://electrum-mona.org"
 
     VERSION_ANNOUNCEMENT_SIGNING_KEYS = (
