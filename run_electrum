@@ -78,7 +78,9 @@ if not is_android:
     check_imports()
 
 
-from electrum_mona.logging import get_logger, configure_logging
+sys._ELECTRUM_RUNNING_VIA_RUNELECTRUM = True  # used by logging.py
+
+from electrum_mona.logging import get_logger, configure_logging  # import logging submodule first
 from electrum_mona import util
 from electrum_mona import constants
 from electrum_mona import SimpleConfig

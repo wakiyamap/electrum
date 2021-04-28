@@ -6,7 +6,9 @@ from electrum_mona.util import create_and_start_event_loop
 from electrum_mona.commands import Commands, eval_bool
 from electrum_mona import storage, wallet
 from electrum_mona.wallet import restore_wallet_from_text
+from electrum_mona.address_synchronizer import TX_HEIGHT_UNCONFIRMED
 from electrum_mona.simple_config import SimpleConfig
+from electrum_mona.transaction import Transaction, TxOutput, tx_from_any
 
 from . import TestCaseForTestnet, ElectrumTestCase
 
@@ -216,6 +218,34 @@ class TestCommandsTestnet(TestCaseForTestnet):
                          cmds._run('getprivatekeyforpath', ("m/0/10000",), wallet=wallet))
         self.assertEqual("p2wpkh:cQAj4WGf1socCPCJNMjXYCJ8Bs5JUAk5pbDr4ris44QdgAXcV24S",
                          cmds._run('getprivatekeyforpath', ("m/5h/100000/88h/7",), wallet=wallet))
+
+    @mock.patch.object(wallet.Abstract_Wallet, 'save_db')
+    def test_payto(self, mock_save_db):
+        wallet = restore_wallet_from_text('disagree rug lemon bean unaware square alone beach tennis exhibit fix mimic',
+                                          gap_limit=2,
+                                          path='if_this_exists_mocking_failed_648151893',
+                                          config=self.config)['wallet']
+        # bootstrap wallet
+        funding_tx = Transaction('0200000000010165806607dd458280cb57bf64a16cf4be85d053145227b98c28932e953076b8e20000000000fdffffff02ac150700000000001600147e3ddfe6232e448a8390f3073c7a3b2044fd17eb102908000000000016001427fbe3707bc57e5bb63d6f15733ec88626d8188a02473044022049ce9efbab88808720aa563e2d9bc40226389ab459c4390ea3e89465665d593502206c1c7c30a2f640af1e463e5107ee4cfc0ee22664cfae3f2606a95303b54cdef80121026269e54d06f7070c1f967eb2874ba60de550dfc327a945c98eb773672d9411fd77181e00')
+        funding_txid = funding_tx.txid()
+        self.assertEqual('ede61d39e501d65ccf34e6300da439419c43393f793bb9a8a4b06b2d0d80a8a0', funding_txid)
+        wallet.receive_tx_callback(funding_txid, funding_tx, TX_HEIGHT_UNCONFIRMED)
+
+        cmds = Commands(config=self.config)
+        tx_str = cmds._run(
+            'payto', (),
+            destination="tmona1qsfcddwf7yytl62e3catwv8hpl2hs9e367y8w6h",
+            amount="0.00123456",
+            feerate=50,
+            locktime=1972344,
+            wallet=wallet)
+
+        tx = tx_from_any(tx_str)
+        self.assertEqual(2, len(tx.outputs()))
+        txout = TxOutput.from_address_and_value("tmona1qsfcddwf7yytl62e3catwv8hpl2hs9e367y8w6h", 123456)
+        self.assertTrue(txout in tx.outputs())
+        self.assertEqual("02000000000101a0a8800d2d6bb0a4a8b93b793f39439c4139a40d30e634cf5cd601e5391de6ed0100000000fdffffff0240e20100000000001600148270d6b93e2117fd2b31c756e61ee1faaf02e63a462b060000000000160014a5103285eb519f826520a9f7d3227e1eaa7ec5f80247304402204b2c53c5bf044955591b9f283f71d37e1d604b98105b697d2588a390ebabe35b0220351669747903759e483fa601ffd8a9a3be9d772cdabd88e6154076b97492f8d5012103001b55f19541faaf7e6d57dd1bdb9fdc37725fc500e12f2418cc11e0aed4154978181e00",
+                         tx_str)
 
     @mock.patch.object(wallet.Abstract_Wallet, 'save_db')
     def test_signtransaction_without_wallet(self, mock_save_db):

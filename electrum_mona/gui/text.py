@@ -18,7 +18,6 @@ from electrum_mona.wallet_db import WalletDB
 from electrum_mona.storage import WalletStorage
 from electrum_mona.network import NetworkParameters, TxBroadcastError, BestEffortRequestFailed
 from electrum_mona.interface import ServerAddr
-from electrum_mona.logging import console_stderr_handler
 
 if TYPE_CHECKING:
     from electrum_mona.daemon import Daemon
@@ -64,7 +63,6 @@ class ElectrumGui:
         self.set_cursor(0)
         self.w = curses.newwin(10, 50, 5, 5)
 
-        console_stderr_handler.setLevel(logging.CRITICAL)
         self.tab = 0
         self.pos = 0
         self.popup_pos = 0

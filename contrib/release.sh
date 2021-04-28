@@ -5,8 +5,8 @@
 # 3. cd .. && git push
 #!/bin/bash
 
-ELECTRUM_DIR=/opt/electrum
-WWW_DIR=/opt/electrum-web
+ELECTRUM_DIR=/opt/electrum-mona
+WWW_DIR=/opt/electrum-mona-web
 
 # Note:
 # uploadserver and website are set in /etc/hosts
@@ -16,7 +16,7 @@ cd $ELECTRUM_DIR
 # rm -f .buildozer
 
 
-VERSION=`python3 -c "import electrum; print(electrum.version.ELECTRUM_VERSION)"`
+VERSION=`python3 -c "import electrum_mona; print(electrum_mona.version.ELECTRUM_VERSION)"`
 echo "VERSION: $VERSION"
 REV=`git describe --tags`
 echo "REV: $REV"
@@ -44,25 +44,25 @@ else
        umask 0022 && \
        mkdir -p $FRESH_CLONE && \
        cd $FRESH_CLONE  && \
-       git clone https://github.com/spesmilo/electrum.git &&\
+       git clone https://github.com/wakiyamap/electrum-mona.git &&\
        cd electrum
    git checkout "${COMMIT}^{commit}"
    sudo docker run -it \
 	--name electrum-sdist-builder-cont \
 	-v $PWD:/opt/electrum \
 	--rm \
-	--workdir /opt/electrum/contrib/build-linux/sdist \
+	--workdir /opt/electrum-mona/contrib/build-linux/sdist \
 	electrum-sdist-builder-img \
 	./build.sh
    popd
-   cp /opt/electrum/contrib/build-linux/sdist/fresh_clone/electrum/dist/$target dist/
+   cp /opt/electrum-mona/contrib/build-linux/sdist/fresh_clone/electrum-mona/dist/$target dist/
 fi
 
 # appimage
 if [ $REV != $VERSION ]; then
-    target=electrum-${REV:0:-2}-x86_64.AppImage
+    target=electrum-mona-${REV:0:-2}-x86_64.AppImage
 else
-    target=electrum-$REV-x86_64.AppImage
+    target=electrum-mona-$REV-x86_64.AppImage
 fi
 
 if test -f dist/$target; then
@@ -71,16 +71,16 @@ else
     sudo docker build -t electrum-appimage-builder-img contrib/build-linux/appimage
     sudo docker run -it \
          --name electrum-appimage-builder-cont \
-	 -v $PWD:/opt/electrum \
+	 -v $PWD:/opt/electrum-mona \
          --rm \
-	 --workdir /opt/electrum/contrib/build-linux/appimage \
+	 --workdir /opt/electrum-mona/contrib/build-linux/appimage \
          electrum-appimage-builder-img \
 	 ./build.sh
 fi
 
 
 # windows
-target=electrum-$REV.exe
+target=electrum-mona-$REV.exe
 if test -f dist/$target; then
     echo "file exists: $target"
 else
@@ -89,26 +89,26 @@ else
         sudo rm -rf $FRESH_CLONE && \
         mkdir -p $FRESH_CLONE && \
         cd $FRESH_CLONE  && \
-        git clone https://github.com/spesmilo/electrum.git && \
-        cd electrum
+        git clone https://github.com/wakiyamap/electrum-mona.git && \
+        cd electrum-mona
     git checkout "${COMMIT}^{commit}"
     sudo docker run -it \
         --name electrum-wine-builder-cont \
-        -v $PWD:/opt/wine64/drive_c/electrum \
+        -v $PWD:/opt/wine64/drive_c/electrum-mona \
         --rm \
-        --workdir /opt/wine64/drive_c/electrum/contrib/build-wine \
+        --workdir /opt/wine64/drive_c/electrum-mona/contrib/build-wine \
         electrum-wine-builder-img \
         ./build.sh
     # do this in the fresh clone directorry!
     cd contrib/build-wine/
     ./sign.sh
-    cp ./signed/*.exe /opt/electrum/dist/
+    cp ./signed/*.exe /opt/electrum-mona/dist/
     popd
 fi
 
 # android
-target1=Electrum-$VERSION.0-armeabi-v7a-release.apk
-target2=Electrum-$VERSION.0-arm64-v8a-release.apk
+target1=Electrum-mona-$VERSION.0-armeabi-v7a-release.apk
+target2=Electrum-mona-$VERSION.0-arm64-v8a-release.apk
 
 if test -f dist/$target1; then
     echo "file exists: $target1"
@@ -119,10 +119,10 @@ else
     mkdir --parents $PWD/.buildozer/.gradle
     sudo docker run -it --rm \
          --name electrum-android-builder-cont \
-         -v $PWD:/home/user/wspace/electrum \
+         -v $PWD:/home/user/wspace/electrum-mona \
          -v $PWD/.buildozer/.gradle:/home/user/.gradle \
          -v ~/.keystore:/home/user/.keystore \
-         --workdir /home/user/wspace/electrum \
+         --workdir /home/user/wspace/electrum-mona \
          electrum-android-builder-img \
          ./contrib/android/make_apk release
 
@@ -133,8 +133,8 @@ fi
 
 
 # wait for dmg before signing
-if test -f dist/electrum-$VERSION.dmg; then
-    if test -f dist/electrum-$VERSION.dmg.asc; then
+if test -f dist/electrum-mona-$VERSION.dmg; then
+    if test -f dist/electrum-mona-$VERSION.dmg.asc; then
 	echo "packages are already signed"
     else
 	echo "signing packages"
@@ -148,7 +148,7 @@ fi
 echo "build complete"
 sha256sum dist/*.tar.gz
 sha256sum dist/*.AppImage
-sha256sum contrib/build-wine/fresh_clone/electrum/contrib/build-wine/dist/*.exe
+sha256sum contrib/build-wine/fresh_clone/electrum-mona/contrib/build-wine/dist/*.exe
 
 echo -n "proceed (y/n)? "
 read answer
@@ -179,17 +179,12 @@ else
     touch dist/uploaded
 fi
 
-#exit 0
 
-# push changes to website
+# push changes to website repo
 pushd $WWW_DIR
 git diff
 git commit -a -m "version $VERSION"
 git push
 popd
 
-# update webserver:
-echo "to deploy, type:"
-echo "ssh root@website \"cd /var/www/new; git pull github master\""
-
-# clear cloudflare cache
+echo "run $WWW_DIR/publish.sh to sign the website commit and upload signature"

@@ -761,6 +761,8 @@ mainnet_block_explorers = {
                         {'tx': 'tx/', 'addr': 'address/'}),
     'chaintools.mona-coin.de': ('https://chaintools.mona-coin.de/',
                         {'tx': 'tx/', 'addr': 'address/'}),
+    'system default': ('blockchain:/',
+                        {'tx': 'tx/', 'addr': 'address/'}),
     'Tokenview': ('https://tokenview.com/cn/',
                         {'tx': 'search/', 'addr': 'search/'}),
 }
@@ -1085,6 +1087,14 @@ def ignore_exceptions(func):
         except Exception as e:
             pass
     return wrapper
+
+
+def with_lock(func):
+    """Decorator to enforce a lock on a function call."""
+    def func_wrapper(self, *args, **kwargs):
+        with self.lock:
+            return func(self, *args, **kwargs)
+    return func_wrapper
 
 
 class TxMinedInfo(NamedTuple):
