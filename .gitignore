@@ -21,9 +21,8 @@ electrum_data
 .DS_Store
 
 # icons
-electrum_mona/gui/kivy/theming/light-0.png
-electrum_mona/gui/kivy/theming/light-1.png
-electrum_mona/gui/kivy/theming/light.atlas
+electrum_mona/gui/kivy/theming/atlas/*.png
+electrum_mona/gui/kivy/theming/atlas/*.atlas
 
 # tests/tox
 .tox/
