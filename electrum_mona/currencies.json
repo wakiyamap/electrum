@@ -187,6 +187,10 @@
         "BTC",
         "JPY"
     ],
+    "CoinEx": [
+        "BTC",
+        "USDT"
+    ],
     "CoinGecko": [
         "AED",
         "ARS",

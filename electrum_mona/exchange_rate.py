@@ -181,6 +181,11 @@ class Coincheck(ExchangeBase):
         json = await self.get_json('coincheck.com', '/api/rate/mona_%s' % ccy.lower())
         return {ccy: Decimal(json['rate'])}
 
+class CoinEx(ExchangeBase):
+    async def get_rates(self, ccy):
+        json = await self.get_json('api.coinex.com', '/v1/market/ticker?market=mona%s' % ccy.lower())
+        return {ccy: Decimal(json['data']['ticker']['last'])}
+
 class CoinGecko(ExchangeBase):
 
     async def get_rates(self, ccy):
