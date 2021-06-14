@@ -79,7 +79,7 @@ from electrum_mona.exchange_rate import FxThread
 from electrum_mona.simple_config import SimpleConfig
 from electrum_mona.logging import Logger
 from electrum_mona.lnutil import ln_dummy_address, extract_nodeid, ConnStringFormatError
-from electrum_mona.lnaddr import lndecode, LnDecodeException, LnAddressError
+from electrum_mona.lnaddr import lndecode, LnDecodeException
 
 from .exception_window import Exception_Hook
 from .amountedit import AmountEdit, BTCAmountEdit, FreezableLineEdit, FeerateEdit
@@ -1242,7 +1242,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
                 if not key:
                     return
                 self.address_list.update()
-        except (InvoiceError, LnAddressError) as e:
+        except InvoiceError as e:
             self.show_error(_('Error creating payment request') + ':\n' + str(e))
             return
 
