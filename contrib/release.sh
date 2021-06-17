@@ -97,7 +97,7 @@ else
         --workdir /opt/wine64/drive_c/electrum-mona/contrib/build-wine \
         electrum-wine-builder-img \
         ./build.sh
-    # do this in the fresh clone directorry!
+    # do this in the fresh clone directory!
     cd contrib/build-wine/
     ./sign.sh
     cp ./signed/*.exe /opt/electrum-mona/dist/
@@ -111,6 +111,7 @@ target2=Electrum-mona-$VERSION.0-arm64-v8a-release.apk
 if test -f dist/$target1; then
     echo "file exists: $target1"
 else
+    pushd .
     ./contrib/android/build_docker_image.sh
     FRESH_CLONE=contrib/android/fresh_clone && \
         sudo rm -rf $FRESH_CLONE && \
@@ -119,7 +120,7 @@ else
         cd $FRESH_CLONE  && \
         git clone https://github.com/spesmilo/electrum.git && \
         cd electrum
-
+    git checkout "${COMMIT}^{commit}"
     mkdir --parents $PWD/.buildozer/.gradle
     sudo docker run -it --rm \
          --name electrum-android-builder-cont \
@@ -129,9 +130,10 @@ else
          --workdir /home/user/wspace/electrum-mona \
          electrum-android-builder-img \
          ./contrib/android/make_apk release
+    popd
 
-    cp bin/$target1 dist/
-    cp bin/$target2 dist/
+    cp contrib/android/fresh_clone/electrum-mona/bin/$target1 dist/
+    cp contrib/android/fresh_clone/electrum-mona/bin/$target2 dist/
 
 fi
 
