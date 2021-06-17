@@ -31,33 +31,18 @@ string = string.replace("##VERSION_APK##", APK_VERSION)
 
 files = {
     'tgz': "Electrum-MONA-%s.tar.gz" % version,
-    'appimage': "Electrum-MONA-%s-x86_64.AppImage" % version,
+    'appimage': "electrum-MONA-%s-x86_64.AppImage" % version,
     'zip': "Electrum-MONA-%s.zip" % version,
     'mac': "electrum-mona-%s.dmg" % version_mac,
     'win': "electrum-mona-%s.exe" % version_win,
     'win_setup': "electrum-mona-%s-setup.exe" % version_win,
     'win_portable': "electrum-mona-%s-portable.exe" % version_win,
+    'apk_arm64': "Electrum-MONA-%s-arm64-v8a-release.apk" % APK_VERSION,
+    'apk_armeabi': "Electrum-MONA-%s-armeabi-v7a-release.apk" % APK_VERSION,
 }
 
 for k, n in files.items():
-    path = "dist/%s"%n
-    link = "https://download.electrum-mona.org/%s/%s"%(version,n)
-    if not os.path.exists(path):
-        os.system("wget -q %s -O %s" % (link, path))
-    if not os.path.getsize(path):
-        os.unlink(path)
-        string = re.sub("<div id=\"%s\">(.*?)</div>"%k, '', string, flags=re.DOTALL + re.MULTILINE)
-        continue
-    sigpath = path + '.ThomasV.asc'
-    siglink = link + '.ThomasV.asc'
-    if not os.path.exists(sigpath):
-        os.system("wget -q %s -O %s" % (siglink, sigpath))
-    if not os.path.getsize(sigpath):
-        os.unlink(sigpath)
-        string = re.sub("<div id=\"%s\">(.*?)</div>"%k, '', string, flags=re.DOTALL + re.MULTILINE)
-        continue
-    if os.system("gpg --verify %s"%sigpath) != 0:
-        raise Exception(sigpath)
+    link = "https://electrum-mona.org/%s/%s"%(version,n)
     string = string.replace("##link_%s##"%k, link)
 
 
