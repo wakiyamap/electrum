@@ -38,8 +38,8 @@ folder.
         umask 0022 && \
         mkdir -p $FRESH_CLONE && \
         cd $FRESH_CLONE  && \
-        git clone https://github.com/spesmilo/electrum.git && \
-        cd electrum
+        git clone https://github.com/wakiyamap/electrum-mona.git && \
+        cd electrum-mona
     ```
 
     And then build from this directory:
