@@ -42,6 +42,7 @@ datas = [
     (home+'electrum_mona/*.json', 'electrum_mona'),
     (home+'electrum_mona/lnwire/*.csv', 'electrum_mona/lnwire'),
     (home+'electrum_mona/wordlist/english.txt', 'electrum_mona/wordlist'),
+    (home+'electrum_mona/wordlist/slip39.txt', 'electrum_mona/wordlist'),
     (home+'electrum_mona/locale', 'electrum_mona/locale'),
     (home+'electrum_mona/plugins', 'electrum_mona/plugins'),
     (home+'electrum_mona/gui/icons', 'electrum_mona/gui/icons'),

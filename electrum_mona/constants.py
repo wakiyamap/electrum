@@ -26,7 +26,7 @@
 import os
 import json
 
-from .util import inv_dict
+from .util import inv_dict, all_subclasses
 from . import bitcoin
 
 
@@ -47,7 +47,17 @@ BIP39_WALLET_FORMATS = read_json('bip39_wallet_formats.json', [])
 
 class AbstractNet:
 
-    BLOCK_HEIGHT_FIRST_LIGHTNING_CHANNELS = 0
+    NET_NAME: str
+    TESTNET: bool
+    WIF_PREFIX: int
+    ADDRTYPE_P2PKH: int
+    ADDRTYPE_P2SH: int
+    SEGWIT_HRP: str
+    BOLT11_HRP: str
+    GENESIS: str
+    BLOCK_HEIGHT_FIRST_LIGHTNING_CHANNELS: int = 0
+    BIP44_COIN_TYPE: int
+    LN_REALM_BYTE: int
 
     @classmethod
     def max_checkpoint(cls) -> int:
@@ -60,12 +70,14 @@ class AbstractNet:
 
 class BitcoinMainnet(AbstractNet):
 
+    NET_NAME = "mainnet"
     TESTNET = False
     WIF_PREFIX = 0xB0
     ADDRTYPE_P2PKH = 50
     ADDRTYPE_P2SH = 55
     ADDRTYPE_P2SH_ALT = 5
     SEGWIT_HRP = "mona"
+    BOLT11_HRP = SEGWIT_HRP
     GENESIS = "ff9f1c0116d19de7c9963845e129f9ed1bfc0b376eb54fd7afa42e0d418c8bb6"
     DEFAULT_PORTS = {'t': '50001', 's': '50002'}
     DEFAULT_SERVERS = read_json('servers.json', {})
@@ -98,12 +110,14 @@ class BitcoinMainnet(AbstractNet):
 
 class BitcoinTestnet(AbstractNet):
 
+    NET_NAME = "testnet"
     TESTNET = True
     WIF_PREFIX = 0xef
     ADDRTYPE_P2PKH = 111
     ADDRTYPE_P2SH = 117
     ADDRTYPE_P2SH_ALT = 196
     SEGWIT_HRP = "tmona"
+    BOLT11_HRP = SEGWIT_HRP
     GENESIS = "a2b106ceba3be0c6d097b2a6a6aacf9d638ba8258ae478158f449c321061e0b2"
     DEFAULT_PORTS = {'t': '51001', 's': '51002'}
     DEFAULT_SERVERS = read_json('servers_testnet.json', {})
@@ -134,7 +148,9 @@ class BitcoinTestnet(AbstractNet):
 
 class BitcoinRegtest(BitcoinTestnet):
 
+    NET_NAME = "regtest"
     SEGWIT_HRP = "rmona"
+    BOLT11_HRP = SEGWIT_HRP
     GENESIS = "7543a69d7c2fcdb29a5ebec2fc064c074a35253b6f3072c8a749473aa590a29c"
     DEFAULT_SERVERS = read_json('servers_regtest.json', {})
     CHECKPOINTS = []
@@ -143,18 +159,36 @@ class BitcoinRegtest(BitcoinTestnet):
 
 class BitcoinSimnet(BitcoinTestnet):
 
+    NET_NAME = "simnet"
     WIF_PREFIX = 0x64
     ADDRTYPE_P2PKH = 0x3f
     ADDRTYPE_P2SH = 0x7b
-    SEGWIT_HRP = "sb"
+    SEGWIT_HRP = "smona"
+    BOLT11_HRP = SEGWIT_HRP
     GENESIS = "683e86bd5c6d110d91b94b97137ba6bfe02dbbdb8e3dff722a669b5d69d77af6"
     DEFAULT_SERVERS = read_json('servers_regtest.json', {})
     CHECKPOINTS = []
     LN_DNS_SEEDS = []
 
 
+class BitcoinSignet(BitcoinTestnet):
+
+    NET_NAME = "signet"
+    BOLT11_HRP = "tmonas"
+    GENESIS = "00000008819873e925422c1ff0f99f7cc9bbb232af63a077a480a3633bee1ef6"
+    DEFAULT_SERVERS = read_json('servers_signet.json', {})
+    CHECKPOINTS = []
+    LN_DNS_SEEDS = []
+
+
+NETS_LIST = tuple(all_subclasses(AbstractNet))
+
 # don't import net directly, import the module instead (so that net is singleton)
 net = BitcoinMainnet
+
+def set_signet():
+    global net
+    net = BitcoinSignet
 
 def set_simnet():
     global net
@@ -167,7 +201,6 @@ def set_mainnet():
 def set_testnet():
     global net
     net = BitcoinTestnet
-
 
 def set_regtest():
     global net
