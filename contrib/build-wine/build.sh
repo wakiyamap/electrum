@@ -43,9 +43,9 @@ fi
 info "building binary..."
 sudo docker run -it \
     --name electrum-mona-wine-builder-cont \
-    -v "$PROJECT_ROOT_OR_FRESHCLONE_ROOT":/opt/wine64/drive_c/electrum \
+    -v "$PROJECT_ROOT_OR_FRESHCLONE_ROOT":/opt/wine64/drive_c/electrum-mona \
     --rm \
-    --workdir /opt/wine64/drive_c/electrum_mona/contrib/build-wine \
+    --workdir /opt/wine64/drive_c/electrum-mona/contrib/build-wine \
     electrum-mona-wine-builder-img \
     ./make_win.sh
 
